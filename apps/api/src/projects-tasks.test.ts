@@ -8,7 +8,7 @@ import type {
   TaskDto,
 } from "@orbit/shared";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "./app.js";
 import type { ApiEnv } from "./config/env.js";
@@ -260,9 +260,9 @@ describe("project and task routes", () => {
       })
       .expect(201);
 
-    vi.useFakeTimers();
+    const previousToday = process.env.ORBIT_TEST_TODAY;
+    process.env.ORBIT_TEST_TODAY = "2026-10-08";
     try {
-      vi.setSystemTime(new Date("2026-10-08T12:00:00.000Z"));
       const dashboard = body<DashboardDto>(
         await request(app)
           .get("/api/dashboard")
@@ -275,7 +275,11 @@ describe("project and task routes", () => {
         dashboard.totalTasks
       );
     } finally {
-      vi.useRealTimers();
+      if (previousToday === undefined) {
+        delete process.env.ORBIT_TEST_TODAY;
+      } else {
+        process.env.ORBIT_TEST_TODAY = previousToday;
+      }
     }
   });
 });
