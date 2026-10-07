@@ -63,6 +63,24 @@ async function parseResponse<TData>(response: Response): Promise<TData> {
   return body.data;
 }
 
+async function parseEnvelope<TData, TMeta>(
+  response: Response
+): Promise<SuccessEnvelope<TData, TMeta>> {
+  const body = (await response.json()) as SuccessEnvelope<TData, TMeta> | ErrorEnvelope;
+
+  if (!response.ok || !body.success) {
+    const error = body as ErrorEnvelope;
+    throw new OrbitApiError(
+      response.status,
+      error.error.code,
+      error.error.message,
+      error.error.fields
+    );
+  }
+
+  return body;
+}
+
 function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
 }
@@ -102,6 +120,30 @@ export function createOrbitClient(options: OrbitClientOptions) {
     return parseResponse<TData>(response);
   }
 
+  async function requestEnvelope<TData, TMeta>(
+    path: string,
+    init: RequestInit = {}
+  ): Promise<SuccessEnvelope<TData, TMeta>> {
+    const token = await options.getAccessToken?.();
+    const headers = new Headers(init.headers);
+
+    if (init.body && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+
+    const response = await fetch(joinUrl(options.baseUrl, path), {
+      ...init,
+      credentials: "include",
+      headers,
+    });
+
+    return parseEnvelope<TData, TMeta>(response);
+  }
+
   async function authRequest(path: string, body: unknown): Promise<AuthSessionDto> {
     const session = await request<AuthSessionDto>(path, {
       method: "POST",
@@ -127,8 +169,8 @@ export function createOrbitClient(options: OrbitClientOptions) {
     dashboard: () => request<DashboardDto>("/api/dashboard"),
     listProjects: async (query: Partial<ProjectQuery> = {}) => {
       const path = `/api/projects${queryString(query)}`;
-      const data = await request<ProjectDto[]>(path);
-      return data as ListResponse<ProjectDto>["items"];
+      const envelope = await requestEnvelope<ProjectDto[], PageMeta>(path);
+      return { items: envelope.data, meta: envelope.meta };
     },
     createProject: (input: ProjectCreateInput) =>
       request<ProjectDto>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
@@ -138,16 +180,16 @@ export function createOrbitClient(options: OrbitClientOptions) {
       request<{ deleted: true }>(`/api/projects/${id}`, { method: "DELETE" }),
     listTasks: async (query: Partial<TaskQuery> = {}) => {
       const path = `/api/tasks${queryString(query)}`;
-      const data = await request<TaskDto[]>(path);
-      return data as ListResponse<TaskDto>["items"];
+      const envelope = await requestEnvelope<TaskDto[], PageMeta>(path);
+      return { items: envelope.data, meta: envelope.meta };
     },
     listProjectTasks: async (
       projectId: string,
       query: Partial<Omit<TaskQuery, "projectId">> = {}
     ) => {
       const path = `/api/projects/${projectId}/tasks${queryString(query)}`;
-      const data = await request<TaskDto[]>(path);
-      return data as ListResponse<TaskDto>["items"];
+      const envelope = await requestEnvelope<TaskDto[], PageMeta>(path);
+      return { items: envelope.data, meta: envelope.meta };
     },
     createTask: (input: TaskCreateInput) =>
       request<TaskDto>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),

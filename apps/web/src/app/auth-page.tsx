@@ -5,6 +5,8 @@ import type { AuthSessionDto, UserDto } from "@orbit/shared";
 import { useMutation } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { DashboardPage } from "./dashboard-page";
+
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 const accessTokenKey = "orbit_access_token";
 
@@ -100,22 +102,12 @@ export function AuthPage() {
 
   if (user) {
     return (
-      <main className="shell">
-        <section className="auth-panel" aria-labelledby="dashboard-title">
-          <p className="eyebrow">Orbit</p>
-          <h1 id="dashboard-title">Welcome, {user.name}</h1>
-          <p className="muted">{user.email}</p>
-          <div className="status success">Signed in and connected to the API.</div>
-          <button
-            className="button secondary"
-            disabled={logoutMutation.isPending}
-            onClick={() => logoutMutation.mutate()}
-            type="button"
-          >
-            {logoutMutation.isPending ? "Signing out..." : "Sign out"}
-          </button>
-        </section>
-      </main>
+      <DashboardPage
+        client={client}
+        onLogout={() => logoutMutation.mutate()}
+        signingOut={logoutMutation.isPending}
+        user={user}
+      />
     );
   }
 
