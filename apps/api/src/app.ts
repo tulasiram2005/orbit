@@ -12,6 +12,7 @@ import { createAuthRouter } from "./auth/auth.routes.js";
 import { createDashboardRouter } from "./dashboard/dashboard.routes.js";
 import { errorHandler } from "./http/error-handler.js";
 import { requestId } from "./http/request-id.js";
+import { prisma } from "./prisma/client.js";
 import { createProjectRouter } from "./projects/project.routes.js";
 import { createProjectTasksRouter, createTaskRouter } from "./tasks/task.routes.js";
 
@@ -47,6 +48,20 @@ export function createApp(env: ApiEnv = readEnv()) {
     };
 
     response.json(payload);
+  });
+  app.get("/ready", async (_request, response, next) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      response.json({
+        success: true,
+        data: {
+          status: "ready",
+          service: "api",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.use("/api/auth", createAuthRouter(env));

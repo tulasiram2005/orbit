@@ -25,7 +25,7 @@ import {
   View,
 } from "react-native";
 
-import { pickNextTask, todayDateOnly } from "./dashboard-logic";
+import { pickNextTask, todayDateOnly, userTimeZone } from "./dashboard-logic";
 import { dashboardStyles as styles } from "./dashboard-styles";
 
 type Props = {
@@ -72,7 +72,7 @@ const projectStatuses: ProjectStatus[] = ["NOT_STARTED", "IN_PROGRESS", "COMPLET
 const taskStatuses: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED"];
 const priorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 const topInset = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
-const scrollBottomPadding = 148;
+const scrollBottomPadding = 176;
 const taskPageSize = 10;
 
 function label(value: string): string {
@@ -140,6 +140,7 @@ function validateTaskForm(form: TaskForm, projectId: string | undefined) {
 
 export function DashboardScreen({ client, isOffline, onLogout, signingOut, user }: Props) {
   const queryClient = useQueryClient();
+  const timezone = userTimeZone();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [sheet, setSheet] = useState<Sheet | undefined>();
   const [projectSearch, setProjectSearch] = useState("");
@@ -147,6 +148,9 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   const [taskStatus, setTaskStatus] = useState<TaskStatus | "">("");
   const [taskPriority, setTaskPriority] = useState<TaskPriority | "">("");
   const [taskPage, setTaskPage] = useState(1);
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailStatus, setDetailStatus] = useState<TaskStatus | "">("");
+  const [detailPriority, setDetailPriority] = useState<TaskPriority | "">("");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const [detailProjectId, setDetailProjectId] = useState<string | undefined>();
   const [taskFormProjectId, setTaskFormProjectId] = useState<string | undefined>();
@@ -160,7 +164,10 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
 
-  const dashboardQuery = useQuery({ queryKey: ["dashboard"], queryFn: () => client.dashboard() });
+  const dashboardQuery = useQuery({
+    queryKey: ["dashboard", timezone],
+    queryFn: () => client.dashboard({ timezone }),
+  });
   const projectQuery = useQuery({
     queryKey: ["projects", projectSearch],
     queryFn: () => client.listProjects({ page: 1, pageSize: 50, search: optional(projectSearch) }),
@@ -169,12 +176,20 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   const projects = projectQuery.data?.items ?? [];
 
   const dashboardTasksQuery = useQuery({
-    queryKey: ["tasks", "dashboard"],
-    queryFn: () => client.listTasks({ page: 1, pageSize: 50 }),
+    queryKey: ["tasks", "dashboard", timezone],
+    queryFn: () => client.listTasks({ page: 1, pageSize: 50, timezone }),
   });
 
   const taskQuery = useQuery({
-    queryKey: ["tasks", selectedProjectId, taskSearch, taskStatus, taskPriority, taskPage],
+    queryKey: [
+      "tasks",
+      selectedProjectId,
+      taskSearch,
+      taskStatus,
+      taskPriority,
+      taskPage,
+      timezone,
+    ],
     queryFn: () =>
       client.listTasks({
         page: taskPage,
@@ -183,19 +198,31 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
         projectId: selectedProjectId,
         search: optional(taskSearch),
         status: taskStatus || undefined,
+        timezone,
       }),
   });
 
   const projectDetailTasksQuery = useQuery({
     enabled: Boolean(detailProjectId),
-    queryKey: ["projectDetailTasks", detailProjectId],
+    queryKey: [
+      "projectDetailTasks",
+      detailProjectId,
+      detailSearch,
+      detailStatus,
+      detailPriority,
+      timezone,
+    ],
     queryFn: () =>
       client.listTasks({
         order: "asc",
         page: 1,
         pageSize: 100,
+        priority: detailPriority || undefined,
         projectId: detailProjectId,
+        search: optional(detailSearch),
         sort: "dueDate",
+        status: detailStatus || undefined,
+        timezone,
       }),
   });
 
@@ -233,6 +260,13 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   function updateTaskProject(id: string | undefined) {
     setSelectedProjectId(id);
     setTaskPage(1);
+  }
+
+  function openProjectDetail(projectId: string) {
+    setDetailProjectId(projectId);
+    setDetailSearch("");
+    setDetailStatus("");
+    setDetailPriority("");
   }
 
   function openProjectSheet() {
@@ -481,10 +515,10 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
           scrollEventThrottle={16}
         >
-          {isOffline ? (
-            <Notice tone="warning" text="Offline mode. Changes need a connection." />
+          {isOffline ? <Notice tone="warning" text="You are offline." /> : null}
+          {dashboardQuery.error ? (
+            <RetryNotice text="Dashboard failed to load." onRetry={refreshAll} />
           ) : null}
-          {dashboardQuery.error ? <Notice tone="danger" text="Dashboard failed to load." /> : null}
           {tab === "dashboard" ? (
             <DashboardView
               data={dashboardQuery.data}
@@ -492,17 +526,26 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
               tasks={dashboardTasks}
               onOpenProjects={() => setTab("projects")}
               onOpenTasks={() => setTab("tasks")}
+              timezone={timezone}
             />
           ) : null}
           {tab === "projects" ? (
             detailProjectId ? (
               <ProjectDetailView
+                hasError={Boolean(projectDetailTasksQuery.error)}
                 isLoading={projectDetailTasksQuery.isLoading}
                 onBack={() => setDetailProjectId(undefined)}
                 onComplete={(task) => completeTask.mutate(task)}
                 onDelete={confirmTaskDelete}
                 onEdit={editTask}
+                onPriority={setDetailPriority}
+                onRetry={refreshAll}
+                onSearch={setDetailSearch}
+                onStatus={setDetailStatus}
+                priority={detailPriority}
                 project={projects.find((project) => project.id === detailProjectId)}
+                search={detailSearch}
+                status={detailStatus}
                 tasks={projectDetailTasksQuery.data?.items ?? []}
               />
             ) : (
@@ -510,7 +553,7 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
                 isLoading={projectQuery.isLoading}
                 onDelete={confirmProjectDelete}
                 onEdit={editProject}
-                onOpen={(project) => setDetailProjectId(project.id)}
+                onOpen={(project) => openProjectDetail(project.id)}
                 onSearch={setProjectSearch}
                 projects={projects}
                 search={projectSearch}
@@ -520,6 +563,7 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
           ) : null}
           {tab === "tasks" ? (
             <TasksView
+              hasError={Boolean(taskQuery.error)}
               isLoading={taskQuery.isLoading}
               onComplete={(task) => completeTask.mutate(task)}
               onDelete={confirmTaskDelete}
@@ -528,6 +572,7 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
               onPrevPage={() => setTaskPage((page) => Math.max(1, page - 1))}
               onPriority={updateTaskPriority}
               onProject={updateTaskProject}
+              onRetry={refreshAll}
               onSearch={updateTaskSearch}
               onStatus={updateTaskStatus}
               page={taskPage}
@@ -652,6 +697,7 @@ function DashboardView({
   onOpenTasks,
   projects,
   tasks,
+  timezone,
 }: {
   data:
     | {
@@ -668,8 +714,9 @@ function DashboardView({
   onOpenTasks: () => void;
   projects: ProjectDto[];
   tasks: TaskDto[];
+  timezone: string;
 }) {
-  const nextTask = pickNextTask(tasks, todayDateOnly());
+  const nextTask = pickNextTask(tasks, todayDateOnly(timezone));
   const activeProject = projects.find((project) => project.status === "IN_PROGRESS") ?? projects[0];
 
   return (
@@ -753,22 +800,39 @@ function ProjectsView({
 }
 
 function ProjectDetailView({
+  hasError,
   isLoading,
   onBack,
   onComplete,
   onDelete,
   onEdit,
+  onPriority,
+  onRetry,
+  onSearch,
+  onStatus,
+  priority,
   project,
+  search,
+  status,
   tasks,
 }: {
+  hasError: boolean;
   isLoading: boolean;
   onBack: () => void;
   onComplete: (task: TaskDto) => void;
   onDelete: (task: TaskDto) => void;
   onEdit: (task: TaskDto) => void;
+  onPriority: (priority: TaskPriority | "") => void;
+  onRetry: () => void;
+  onSearch: (value: string) => void;
+  onStatus: (status: TaskStatus | "") => void;
+  priority: TaskPriority | "";
   project: ProjectDto | undefined;
+  search: string;
+  status: TaskStatus | "";
   tasks: TaskDto[];
 }) {
+  const filtered = Boolean(search || status || priority);
   return (
     <View style={styles.stack}>
       <View style={styles.sectionTitle}>
@@ -779,9 +843,25 @@ function ProjectDetailView({
       </View>
       {project ? <ProjectCard project={project} /> : <EmptyState text="Project not found" />}
       <SectionTitle meta="Project tasks" title="Tasks" />
+      <SearchBox onClear={() => onSearch("")} onSearch={onSearch} value={search} />
+      <FilterBar
+        onPriority={onPriority}
+        onProject={() => undefined}
+        onStatus={onStatus}
+        priority={priority}
+        projects={[]}
+        projectId={project?.id}
+        showProjectFilter={false}
+        status={status}
+      />
       <View style={styles.list}>
         {isLoading ? <EmptyState text="Loading tasks..." /> : null}
-        {!isLoading && tasks.length === 0 ? <EmptyState text="No tasks yet" /> : null}
+        {hasError ? (
+          <RetryState text="Could not load this project's tasks." onRetry={onRetry} />
+        ) : null}
+        {!isLoading && !hasError && tasks.length === 0 ? (
+          <EmptyState text={filtered ? "No tasks match your filters" : "No tasks yet"} />
+        ) : null}
         {tasks.map((task) => (
           <TaskRow
             key={task.id}
@@ -797,6 +877,7 @@ function ProjectDetailView({
 }
 
 function TasksView({
+  hasError,
   isLoading,
   onComplete,
   onDelete,
@@ -805,6 +886,7 @@ function TasksView({
   onPrevPage,
   onPriority,
   onProject,
+  onRetry,
   onSearch,
   onStatus,
   page,
@@ -817,6 +899,7 @@ function TasksView({
   tasks,
   total,
 }: {
+  hasError: boolean;
   isLoading: boolean;
   onComplete: (task: TaskDto) => void;
   onDelete: (task: TaskDto) => void;
@@ -825,6 +908,7 @@ function TasksView({
   onPrevPage: () => void;
   onPriority: (priority: TaskPriority | "") => void;
   onProject: (id: string | undefined) => void;
+  onRetry: () => void;
   onSearch: (value: string) => void;
   onStatus: (status: TaskStatus | "") => void;
   page: number;
@@ -855,7 +939,8 @@ function TasksView({
       />
       <View style={styles.list}>
         {isLoading ? <EmptyState text="Loading tasks..." /> : null}
-        {!isLoading && tasks.length === 0 ? (
+        {hasError ? <RetryState text="Could not load tasks." onRetry={onRetry} /> : null}
+        {!isLoading && !hasError && tasks.length === 0 ? (
           <EmptyState text={filtered ? "No tasks match your filters" : "No tasks yet"} />
         ) : null}
         {tasks.map((task) => (
@@ -898,6 +983,7 @@ function FilterBar({
   priority,
   projects,
   projectId,
+  showProjectFilter = true,
   status,
 }: {
   onPriority: (priority: TaskPriority | "") => void;
@@ -906,6 +992,7 @@ function FilterBar({
   priority: TaskPriority | "";
   projects: ProjectDto[];
   projectId: string | undefined;
+  showProjectFilter?: boolean;
   status: TaskStatus | "";
 }) {
   return (
@@ -926,17 +1013,23 @@ function FilterBar({
         onChange={onPriority}
         value={priority}
       />
-      <View style={styles.projectSelector}>
-        <Chip active={!projectId} label="All projects" onPress={() => onProject(undefined)} />
-        {projects.map((project) => (
-          <Chip
-            active={projectId === project.id}
-            key={project.id}
-            label={project.name}
-            onPress={() => onProject(project.id)}
-          />
-        ))}
-      </View>
+      {showProjectFilter ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.chipRow}
+        >
+          <Chip active={!projectId} label="All projects" onPress={() => onProject(undefined)} />
+          {projects.map((project) => (
+            <Chip
+              active={projectId === project.id}
+              key={project.id}
+              label={project.name}
+              onPress={() => onProject(project.id)}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -951,7 +1044,11 @@ function ChipRow<T extends string>({
   value: T;
 }) {
   return (
-    <View style={styles.projectSelector}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.chipRow}
+    >
       {items.map((item) => (
         <Chip
           active={value === item.value}
@@ -960,7 +1057,7 @@ function ChipRow<T extends string>({
           onPress={() => onChange(item.value)}
         />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -1075,7 +1172,11 @@ function ProjectPicker({
     return <EmptyState text="Create a project before adding tasks." />;
   }
   return (
-    <View style={styles.projectSelector}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.chipRow}
+    >
       {projects.map((project) => (
         <Chip
           active={selectedId === project.id}
@@ -1084,7 +1185,7 @@ function ProjectPicker({
           onPress={() => onSelect(project.id)}
         />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -1231,9 +1332,9 @@ function TaskFormView({
         style={[styles.input, disabled ? styles.inputDisabled : null]}
         value={form.name}
       />
-      {disabled ? (
-        <Text style={styles.formHint}>Choose a project to enable the task name field.</Text>
-      ) : null}
+      <Text style={[styles.formHint, !disabled ? styles.formHintHidden : null]}>
+        Choose a project to enable the task name field.
+      </Text>
       <TextInput
         editable={!disabled}
         multiline
@@ -1334,9 +1435,7 @@ function TaskRow({
         </TouchableOpacity>
         <View style={styles.flex}>
           <Text style={styles.itemTitle}>{task.name}</Text>
-          <Text style={styles.itemMeta}>
-            {label(task.status)} / {label(task.priority)}
-          </Text>
+          <Text style={styles.itemMeta}>{label(task.status)}</Text>
           {task.dueDate ? <Text style={styles.itemMeta}>Due {task.dueDate}</Text> : null}
         </View>
         <Text style={[styles.badge, task.priority === "HIGH" ? styles.hotBadge : null]}>
@@ -1413,6 +1512,27 @@ function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () =
 
 function Notice({ text, tone }: { text: string; tone: "danger" | "warning" }) {
   return <Text style={[styles.notice, styles[tone]]}>{text}</Text>;
+}
+
+function RetryNotice({ onRetry, text }: { onRetry: () => void; text: string }) {
+  return (
+    <View style={[styles.noticeBox, styles.dangerBox]}>
+      <Text style={styles.noticeTitle}>{text}</Text>
+      <ActionButton label="Retry" onPress={onRetry} secondary />
+    </View>
+  );
+}
+
+function RetryState({ onRetry, text }: { onRetry: () => void; text: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>{text}</Text>
+      <Text style={styles.emptyText}>Check your connection and try again.</Text>
+      <TouchableOpacity onPress={onRetry} style={styles.retryButton}>
+        <Text style={styles.retryText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 function EmptyState({ text }: { text: string }) {

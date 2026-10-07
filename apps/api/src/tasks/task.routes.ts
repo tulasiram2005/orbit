@@ -32,6 +32,12 @@ export function createTaskRouter(env: ApiEnv) {
     validateBody(taskUpdateSchema),
     asyncHandler(controller.update)
   );
+  router.put(
+    "/:id",
+    validateParams(idParamSchema),
+    validateBody(taskUpdateSchema),
+    asyncHandler(controller.update)
+  );
   router.post(
     "/:id/complete",
     validateParams(idParamSchema),

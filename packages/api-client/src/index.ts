@@ -1,5 +1,6 @@
 import type {
   AuthSessionDto,
+  DashboardQuery,
   ErrorEnvelope,
   HealthResponse,
   LoginInput,
@@ -166,7 +167,8 @@ export function createOrbitClient(options: OrbitClientOptions) {
       await options.onAccessToken?.(undefined);
     },
     me: () => request<UserDto>("/api/auth/me"),
-    dashboard: () => request<DashboardDto>("/api/dashboard"),
+    dashboard: (query: Partial<DashboardQuery> = {}) =>
+      request<DashboardDto>(`/api/dashboard${queryString(query)}`),
     listProjects: async (query: Partial<ProjectQuery> = {}) => {
       const path = `/api/projects${queryString(query)}`;
       const envelope = await requestEnvelope<ProjectDto[], PageMeta>(path);
@@ -194,7 +196,7 @@ export function createOrbitClient(options: OrbitClientOptions) {
     createTask: (input: TaskCreateInput) =>
       request<TaskDto>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
     updateTask: (id: string, input: TaskUpdateInput) =>
-      request<TaskDto>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+      request<TaskDto>(`/api/tasks/${id}`, { method: "PUT", body: JSON.stringify(input) }),
     completeTask: (id: string) =>
       request<TaskDto>(`/api/tasks/${id}/complete`, { method: "POST", body: JSON.stringify({}) }),
     deleteTask: (id: string) =>

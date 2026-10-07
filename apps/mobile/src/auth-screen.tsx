@@ -31,6 +31,7 @@ type AuthForm = {
 
 type FieldProps = {
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  autoComplete?: "off" | "email" | "password" | "name";
   inputMode?: "email" | "none" | "search" | "tel" | "text" | "url" | "numeric" | "decimal";
   keyboardType?: "default" | "email-address";
   label: string;
@@ -57,6 +58,7 @@ function messageFor(error: unknown): string {
 
 function Field({
   autoCapitalize,
+  autoComplete = "off",
   inputMode,
   keyboardType,
   label,
@@ -70,13 +72,17 @@ function Field({
       <Text style={styles.label}>{label}</Text>
       <TextInput
         autoCapitalize={autoCapitalize}
+        autoComplete={autoComplete}
+        importantForAutofill="no"
         inputMode={inputMode}
         keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor="#6F7894"
         secureTextEntry={secureTextEntry}
+        selectionColor="#22D3EE"
         style={styles.input}
+        textContentType="none"
         value={value}
       />
     </View>
@@ -243,6 +249,7 @@ export function AuthScreen() {
           ) : null}
           <Field
             autoCapitalize="none"
+            autoComplete="off"
             inputMode="email"
             keyboardType="email-address"
             label="Email"
@@ -251,6 +258,7 @@ export function AuthScreen() {
             value={form.email}
           />
           <Field
+            autoComplete="off"
             label="Password"
             onChangeText={(password) => setForm({ ...form, password })}
             placeholder="Enter password"

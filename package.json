@@ -11,10 +11,12 @@
     "lint": "eslint .",
     "test": "pnpm -r test",
     "format": "prettier --check .",
+    "postinstall": "pnpm --filter api prisma generate",
     "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^24.7.0",
     "eslint": "^9.38.0",
     "eslint-config-prettier": "^10.1.8",

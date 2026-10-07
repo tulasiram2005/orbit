@@ -26,24 +26,33 @@ export function pickNextTask(tasks: TaskDto[], today: string): TaskDto | undefin
         return leftOverdue ? -1 : 1;
       }
 
-      const dueDifference = dueTime(left) - dueTime(right);
-      if (dueDifference !== 0) {
-        return dueDifference;
-      }
-
       const priorityDifference = priorityRank[left.priority] - priorityRank[right.priority];
       if (priorityDifference !== 0) {
         return priorityDifference;
+      }
+
+      const dueDifference = dueTime(left) - dueTime(right);
+      if (dueDifference !== 0) {
+        return dueDifference;
       }
 
       return left.createdAt.localeCompare(right.createdAt);
     })[0];
 }
 
-export function todayDateOnly() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
+export function userTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+export function todayDateOnly(timezone = userTimeZone()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: timezone,
+    year: "numeric",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value ?? "1970";
+  const month = parts.find((part) => part.type === "month")?.value ?? "01";
+  const date = parts.find((part) => part.type === "day")?.value ?? "01";
   return `${year}-${month}-${date}`;
 }

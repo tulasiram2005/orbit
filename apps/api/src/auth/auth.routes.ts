@@ -19,9 +19,10 @@ export function createAuthRouter(env: ApiEnv) {
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 20,
+    limit: 5,
     standardHeaders: true,
     legacyHeaders: false,
+    skipSuccessfulRequests: true,
     handler: (request, response) => {
       response.status(429).json({
         success: false,

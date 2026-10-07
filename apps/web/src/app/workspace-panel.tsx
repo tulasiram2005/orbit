@@ -9,6 +9,7 @@ import { ProjectFormView, ProjectList, TaskFormView, TaskList } from "./workspac
 
 type WorkspacePanelProps = {
   client: OrbitClient;
+  timezone: string;
 };
 
 type ProjectForm = {
@@ -47,12 +48,13 @@ function optional(value: string) {
   return value.trim() || undefined;
 }
 
-export function WorkspacePanel({ client }: WorkspacePanelProps) {
+export function WorkspacePanel({ client, timezone }: WorkspacePanelProps) {
   const queryClient = useQueryClient();
   const [projectSearch, setProjectSearch] = useState("");
   const [projectStatus, setProjectStatus] = useState<ProjectStatus | "">("");
   const [taskSearch, setTaskSearch] = useState("");
   const [taskStatus, setTaskStatus] = useState<TaskStatus | "">("");
+  const [taskPriority, setTaskPriority] = useState<TaskPriority | "">("");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const [editingProjectId, setEditingProjectId] = useState<string | undefined>();
   const [editingTaskId, setEditingTaskId] = useState<string | undefined>();
@@ -78,13 +80,15 @@ export function WorkspacePanel({ client }: WorkspacePanelProps) {
 
   const taskQuery = useQuery({
     enabled: Boolean(selectedProject?.id),
-    queryKey: ["tasks", selectedProject?.id, taskSearch, taskStatus],
+    queryKey: ["tasks", selectedProject?.id, taskSearch, taskStatus, taskPriority, timezone],
     queryFn: () =>
       client.listProjectTasks(selectedProject?.id ?? "", {
         page: 1,
         pageSize: 50,
+        priority: taskPriority || undefined,
         search: optional(taskSearch),
         status: taskStatus || undefined,
+        timezone,
       }),
   });
 
@@ -188,6 +192,18 @@ export function WorkspacePanel({ client }: WorkspacePanelProps) {
     });
   }
 
+  function confirmDeleteProject(projectId: string) {
+    if (window.confirm("Delete this project and its tasks?")) {
+      deleteProject.mutate(projectId);
+    }
+  }
+
+  function confirmDeleteTask(taskId: string) {
+    if (window.confirm("Delete this task?")) {
+      deleteTask.mutate(taskId);
+    }
+  }
+
   return (
     <section className="workspace">
       <div className="pane">
@@ -224,8 +240,9 @@ export function WorkspacePanel({ client }: WorkspacePanelProps) {
         />
         <ProjectList
           activeId={selectedProject?.id}
+          hasError={Boolean(projectQuery.error)}
           isLoading={projectQuery.isLoading}
-          onDelete={(id) => deleteProject.mutate(id)}
+          onDelete={confirmDeleteProject}
           onEdit={editProject}
           onSelect={setSelectedProjectId}
           projects={projects}
@@ -252,6 +269,15 @@ export function WorkspacePanel({ client }: WorkspacePanelProps) {
             <option value="IN_PROGRESS">In progress</option>
             <option value="COMPLETED">Completed</option>
           </select>
+          <select
+            value={taskPriority}
+            onChange={(event) => setTaskPriority(event.target.value as TaskPriority | "")}
+          >
+            <option value="">All priorities</option>
+            <option value="LOW">Low</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="HIGH">High</option>
+          </select>
         </div>
         <TaskFormView
           disabled={!selectedProject}
@@ -266,9 +292,10 @@ export function WorkspacePanel({ client }: WorkspacePanelProps) {
           onSubmit={submitTask}
         />
         <TaskList
+          hasError={Boolean(taskQuery.error)}
           isLoading={taskQuery.isLoading}
           onComplete={(id) => completeTask.mutate(id)}
-          onDelete={(id) => deleteTask.mutate(id)}
+          onDelete={confirmDeleteTask}
           onEdit={editTask}
           tasks={taskQuery.data?.items ?? []}
         />

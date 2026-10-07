@@ -10,6 +10,12 @@ const envSchema = z.object({
         .split(",")
         .map((origin) => origin.trim())
         .filter(Boolean)
+    )
+    .pipe(
+      z
+        .array(z.string().url())
+        .min(1)
+        .refine((origins) => !origins.includes("*"))
     ),
   DATABASE_URL: z.string().url(),
   JWT_ACCESS_SECRET: z.string().min(32),

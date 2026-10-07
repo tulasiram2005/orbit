@@ -205,6 +205,85 @@ describe("project and task routes", () => {
     expect(dashboard.projectsInProgress).toBe(1);
   });
 
+  it("enforces authorization matrix across protected project and task endpoints", async () => {
+    const ownerToken = await register("owner-matrix");
+    const otherToken = await register("other-matrix");
+
+    const project = body<ProjectDto>(
+      await request(app)
+        .post("/api/projects")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ name: "Private Project", status: "IN_PROGRESS" })
+        .expect(201)
+    ).data;
+    const task = body<TaskDto>(
+      await request(app)
+        .post("/api/tasks")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ projectId: project.id, name: "Private Task", priority: "HIGH" })
+        .expect(201)
+    ).data;
+
+    await request(app).get("/api/projects").expect(401);
+    await request(app).get("/api/tasks").expect(401);
+    await request(app).get("/api/dashboard").expect(401);
+    await request(app).get("/api/auth/me").expect(401);
+
+    await request(app)
+      .get(`/api/projects/${project.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .expect(404);
+    await request(app)
+      .patch(`/api/projects/${project.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send({ name: "Stolen" })
+      .expect(404);
+    await request(app)
+      .delete(`/api/projects/${project.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .expect(404);
+
+    const crossProjectTasks = listBody<TaskDto>(
+      await request(app)
+        .get(`/api/projects/${project.id}/tasks`)
+        .set("Authorization", `Bearer ${otherToken}`)
+        .expect(200)
+    );
+    expect(crossProjectTasks.data).toHaveLength(0);
+    expect(crossProjectTasks.meta.total).toBe(0);
+
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send({ projectId: project.id, name: "Cross-user task" })
+      .expect(404);
+    await request(app)
+      .get(`/api/tasks/${task.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .expect(404);
+    await request(app)
+      .put(`/api/tasks/${task.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send({ name: "Stolen task" })
+      .expect(404);
+    await request(app)
+      .post(`/api/tasks/${task.id}/complete`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .expect(404);
+    await request(app)
+      .delete(`/api/tasks/${task.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .expect(404);
+
+    const ownerProject = body<ProjectDto>(
+      await request(app)
+        .get(`/api/projects/${project.id}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .expect(200)
+    ).data;
+    expect(ownerProject.name).toBe("Private Project");
+  });
+
   it("counts overdue tasks as unfinished tasks before the local calendar day", async () => {
     const ownerToken = await register("owner-overdue");
     const project = body<ProjectDto>(
@@ -260,25 +339,60 @@ describe("project and task routes", () => {
       })
       .expect(201);
 
-    const previousToday = process.env.ORBIT_TEST_TODAY;
-    process.env.ORBIT_TEST_TODAY = "2026-10-08";
+    const previousNow = process.env.ORBIT_TEST_NOW;
+    process.env.ORBIT_TEST_NOW = "2026-10-07T20:30:00.000Z";
     try {
-      const dashboard = body<DashboardDto>(
+      const indiaDashboard = body<DashboardDto>(
         await request(app)
-          .get("/api/dashboard")
+          .get("/api/dashboard?timezone=Asia/Kolkata")
           .set("Authorization", `Bearer ${ownerToken}`)
           .expect(200)
       ).data;
 
-      expect(dashboard.overdueTasks).toBe(2);
-      expect(dashboard.completedTasks + dashboard.pendingTasks + dashboard.inProgressTasks).toBe(
-        dashboard.totalTasks
+      expect(indiaDashboard.overdueTasks).toBe(2);
+      expect(
+        indiaDashboard.completedTasks + indiaDashboard.pendingTasks + indiaDashboard.inProgressTasks
+      ).toBe(indiaDashboard.totalTasks);
+
+      const utcDashboard = body<DashboardDto>(
+        await request(app)
+          .get("/api/dashboard?timezone=UTC")
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .expect(200)
+      ).data;
+      expect(utcDashboard.overdueTasks).toBe(1);
+
+      const utcMinusEightDashboard = body<DashboardDto>(
+        await request(app)
+          .get("/api/dashboard?timezone=Etc/GMT+8")
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .expect(200)
+      ).data;
+      expect(utcMinusEightDashboard.overdueTasks).toBe(1);
+
+      const invalidTimezoneDashboard = body<DashboardDto>(
+        await request(app)
+          .get("/api/dashboard?timezone=DefinitelyNotAZone")
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .expect(200)
+      ).data;
+      expect(invalidTimezoneDashboard.overdueTasks).toBe(1);
+
+      const indiaOverdueTasks = listBody<TaskDto>(
+        await request(app)
+          .get("/api/tasks?overdue=true&timezone=Asia/Kolkata&pageSize=10")
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .expect(200)
       );
+      expect(indiaOverdueTasks.data.map((task) => task.name).sort()).toEqual([
+        "Archive stale project notes",
+        "Design offline banner",
+      ]);
     } finally {
-      if (previousToday === undefined) {
-        delete process.env.ORBIT_TEST_TODAY;
+      if (previousNow === undefined) {
+        delete process.env.ORBIT_TEST_NOW;
       } else {
-        process.env.ORBIT_TEST_TODAY = previousToday;
+        process.env.ORBIT_TEST_NOW = previousNow;
       }
     }
   });

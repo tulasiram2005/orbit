@@ -15,7 +15,7 @@ function task(input: Partial<TaskDto> & Pick<TaskDto, "name">): TaskDto {
 }
 
 describe("dashboard task ranking", () => {
-  it("ranks overdue tasks first, then earliest due date, then priority", () => {
+  it("ranks overdue tasks first, then priority, then earliest due date", () => {
     const nextTask = pickNextTask(
       [
         task({
@@ -44,18 +44,18 @@ describe("dashboard task ranking", () => {
       "2026-10-08"
     );
 
-    expect(nextTask?.name).toBe("Archive stale project notes");
+    expect(nextTask?.name).toBe("Design offline banner");
   });
 
-  it("uses priority when due dates match", () => {
+  it("uses due date when priority matches", () => {
     const nextTask = pickNextTask(
       [
-        task({ dueDate: "2026-10-09", name: "Medium task", priority: "MEDIUM" }),
-        task({ dueDate: "2026-10-09", name: "High task", priority: "HIGH" }),
+        task({ dueDate: "2026-10-12", name: "Later high task", priority: "HIGH" }),
+        task({ dueDate: "2026-10-09", name: "Earlier high task", priority: "HIGH" }),
       ],
       "2026-10-08"
     );
 
-    expect(nextTask?.name).toBe("High task");
+    expect(nextTask?.name).toBe("Earlier high task");
   });
 });

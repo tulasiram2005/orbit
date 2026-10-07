@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import type { TaskCreateInput, TaskQuery, TaskUpdateInput } from "@orbit/shared";
 
-import { fromDateOnly, todayUtcDateOnly } from "../utils/date.js";
+import { fromDateOnly, todayDateOnlyInTimeZone } from "../utils/date.js";
 
 function whereFor(userId: string, query: TaskQuery): Prisma.TaskWhereInput {
   const where: Prisma.TaskWhereInput = {
@@ -27,7 +27,7 @@ function whereFor(userId: string, query: TaskQuery): Prisma.TaskWhereInput {
     }
   }
   if (query.overdue) {
-    where.dueDate = { lt: todayUtcDateOnly() };
+    where.dueDate = { lt: todayDateOnlyInTimeZone(query.timezone) };
     where.status = { not: "COMPLETED" };
   }
 

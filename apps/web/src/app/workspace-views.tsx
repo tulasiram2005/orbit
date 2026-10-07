@@ -163,6 +163,7 @@ export function TaskFormView({
 
 export function ProjectList({
   activeId,
+  hasError,
   isLoading,
   onDelete,
   onEdit,
@@ -170,6 +171,7 @@ export function ProjectList({
   projects,
 }: {
   activeId: string | undefined;
+  hasError: boolean;
   isLoading: boolean;
   onDelete: (id: string) => void;
   onEdit: (project: ProjectDto) => void;
@@ -178,6 +180,9 @@ export function ProjectList({
 }) {
   if (isLoading) {
     return <div className="empty-state">Loading projects...</div>;
+  }
+  if (hasError) {
+    return <div className="empty-state danger-text">Projects could not load.</div>;
   }
   if (projects.length === 0) {
     return <div className="empty-state">No projects yet.</div>;
@@ -214,12 +219,14 @@ export function ProjectList({
 }
 
 export function TaskList({
+  hasError,
   isLoading,
   onComplete,
   onDelete,
   onEdit,
   tasks,
 }: {
+  hasError: boolean;
   isLoading: boolean;
   onComplete: (id: string) => void;
   onDelete: (id: string) => void;
@@ -228,6 +235,9 @@ export function TaskList({
 }) {
   if (isLoading) {
     return <div className="empty-state">Loading tasks...</div>;
+  }
+  if (hasError) {
+    return <div className="empty-state danger-text">Tasks could not load.</div>;
   }
   if (tasks.length === 0) {
     return <div className="empty-state">No tasks match this view.</div>;

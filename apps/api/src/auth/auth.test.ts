@@ -33,6 +33,12 @@ function errorBody(response: request.Response): ErrorEnvelope {
   return response.body as ErrorEnvelope;
 }
 
+function expectNoSensitiveFields(response: request.Response) {
+  const text = JSON.stringify(response.body);
+  expect(text).not.toContain("passwordHash");
+  expect(text).not.toContain("tokenHash");
+}
+
 describe("auth routes", () => {
   beforeAll(async () => {
     await prisma.$connect();
@@ -64,7 +70,7 @@ describe("auth routes", () => {
     expect(body.data.user.email).toBe(`new.user+${testRun}`);
     expect(typeof body.data.tokens.accessToken).toBe("string");
     expect(typeof body.data.tokens.refreshToken).toBe("string");
-    expect(JSON.stringify(body)).not.toContain("passwordHash");
+    expectNoSensitiveFields(response);
   });
 
   it("rejects duplicate emails case-insensitively", async () => {
@@ -95,6 +101,32 @@ describe("auth routes", () => {
       .expect(401);
 
     expect(errorBody(response).error.message).toBe("Invalid credentials");
+    expectNoSensitiveFields(response);
+  });
+
+  it("rate limits the sixth rapid bad login", async () => {
+    const rateLimitApp = createApp(env);
+    const email = `rate-limit+${testRun}`;
+    await request(rateLimitApp)
+      .post("/api/auth/register")
+      .send({ email, name: "Rate Limit User", password })
+      .expect(201);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const response = await request(rateLimitApp)
+        .post("/api/auth/login")
+        .send({ email, password: "WrongPassword123!" })
+        .expect(401);
+      expectNoSensitiveFields(response);
+    }
+
+    const limited = await request(rateLimitApp)
+      .post("/api/auth/login")
+      .send({ email, password: "WrongPassword123!" })
+      .expect(429);
+
+    expect(errorBody(limited).error.code).toBe("RATE_LIMITED");
+    expectNoSensitiveFields(limited);
   });
 
   it("logs in and reads the current user with an access token", async () => {
@@ -116,6 +148,7 @@ describe("auth routes", () => {
       .expect(200);
 
     expect(userBody(meResponse).data.email).toBe(email);
+    expectNoSensitiveFields(meResponse);
   });
 
   it("rejects /me without a bearer token", async () => {

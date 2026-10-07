@@ -1,11 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { todayUtcDateOnly } from "../utils/date.js";
+import { todayDateOnlyInTimeZone } from "../utils/date.js";
 
 export class DashboardRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async get(userId: string) {
+  async get(userId: string, timezone: string) {
     const [
       totalProjects,
       totalTasks,
@@ -23,7 +23,7 @@ export class DashboardRepository {
       this.db.task.count({
         where: {
           userId,
-          dueDate: { lt: todayUtcDateOnly() },
+          dueDate: { lt: todayDateOnlyInTimeZone(timezone) },
           status: { not: "COMPLETED" },
         },
       }),

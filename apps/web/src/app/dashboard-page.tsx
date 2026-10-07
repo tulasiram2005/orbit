@@ -18,14 +18,20 @@ const dashboardCards = [
   ["totalTasks", "Tasks"],
   ["completedTasks", "Completed"],
   ["pendingTasks", "Pending"],
+  ["inProgressTasks", "In progress"],
   ["projectsInProgress", "Projects in progress"],
   ["overdueTasks", "Overdue"],
 ] as const;
 
+function userTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 export function DashboardPage({ client, onLogout, signingOut, user }: DashboardPageProps) {
+  const timezone = userTimeZone();
   const dashboardQuery = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => client.dashboard(),
+    queryKey: ["dashboard", timezone],
+    queryFn: () => client.dashboard({ timezone }),
   });
 
   return (
@@ -58,7 +64,7 @@ export function DashboardPage({ client, onLogout, signingOut, user }: DashboardP
         ))}
       </section>
 
-      <WorkspacePanel client={client} />
+      <WorkspacePanel client={client} timezone={timezone} />
     </main>
   );
 }

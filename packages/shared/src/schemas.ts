@@ -106,6 +106,21 @@ const paginationSchema = {
 const projectSortSchema = z.coerce.string().pipe(z.enum(["createdAt", "name", "endDate"]));
 const taskSortSchema = z.coerce.string().pipe(z.enum(["createdAt", "name", "dueDate", "priority"]));
 const orderSchema = z.coerce.string().pipe(z.enum(["asc", "desc"]));
+const timezoneValueSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .refine((value) => {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  })
+  .catch("UTC");
+export const timezoneSchema = timezoneValueSchema.optional().default("UTC");
 
 export const projectQuerySchema = z
   .object({
@@ -125,9 +140,16 @@ export const taskQuerySchema = z
     priority: taskPrioritySchema.optional(),
     dueBefore: isoDateSchema.optional(),
     overdue: z.coerce.boolean().optional(),
+    timezone: timezoneSchema,
     sort: taskSortSchema.optional().default("createdAt"),
     order: orderSchema.optional().default("desc"),
     ...paginationSchema,
+  })
+  .strict();
+
+export const dashboardQuerySchema = z
+  .object({
+    timezone: timezoneSchema,
   })
   .strict();
 
@@ -153,5 +175,6 @@ export type ProjectQuery = z.infer<typeof projectQuerySchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 export type TaskQuery = z.infer<typeof taskQuerySchema>;
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
 export type IdParam = z.infer<typeof idParamSchema>;
 export type ProjectIdParam = z.infer<typeof projectIdParamSchema>;
