@@ -8,7 +8,7 @@ import type {
   TaskDto,
 } from "@orbit/shared";
 import request from "supertest";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createApp } from "./app.js";
 import type { ApiEnv } from "./config/env.js";
@@ -203,5 +203,79 @@ describe("project and task routes", () => {
       dashboard.totalTasks
     );
     expect(dashboard.projectsInProgress).toBe(1);
+  });
+
+  it("counts overdue tasks as unfinished tasks before the local calendar day", async () => {
+    const ownerToken = await register("owner-overdue");
+    const project = body<ProjectDto>(
+      await request(app)
+        .post("/api/projects")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ name: "Overdue Sprint", status: "IN_PROGRESS" })
+        .expect(201)
+    ).data;
+
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        projectId: project.id,
+        name: "Design offline banner",
+        priority: "HIGH",
+        status: "IN_PROGRESS",
+        dueDate: "2026-10-07",
+      })
+      .expect(201);
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        projectId: project.id,
+        name: "Archive stale project notes",
+        priority: "LOW",
+        status: "PENDING",
+        dueDate: "2026-09-20",
+      })
+      .expect(201);
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        projectId: project.id,
+        name: "Completed old task",
+        priority: "HIGH",
+        status: "COMPLETED",
+        dueDate: "2026-09-01",
+      })
+      .expect(201);
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({
+        projectId: project.id,
+        name: "Due today task",
+        priority: "HIGH",
+        status: "PENDING",
+        dueDate: "2026-10-08",
+      })
+      .expect(201);
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-08T12:00:00.000Z"));
+      const dashboard = body<DashboardDto>(
+        await request(app)
+          .get("/api/dashboard")
+          .set("Authorization", `Bearer ${ownerToken}`)
+          .expect(200)
+      ).data;
+
+      expect(dashboard.overdueTasks).toBe(2);
+      expect(dashboard.completedTasks + dashboard.pendingTasks + dashboard.inProgressTasks).toBe(
+        dashboard.totalTasks
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
