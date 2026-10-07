@@ -131,6 +131,18 @@ export const taskQuerySchema = z
   })
   .strict();
 
+export const idParamSchema = z
+  .object({
+    id: uuidSchema,
+  })
+  .strict();
+
+export const projectIdParamSchema = z
+  .object({
+    projectId: uuidSchema,
+  })
+  .strict();
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -141,3 +153,5 @@ export type ProjectQuery = z.infer<typeof projectQuerySchema>;
 export type TaskCreateInput = z.infer<typeof taskCreateSchema>;
 export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 export type TaskQuery = z.infer<typeof taskQuerySchema>;
+export type IdParam = z.infer<typeof idParamSchema>;
+export type ProjectIdParam = z.infer<typeof projectIdParamSchema>;

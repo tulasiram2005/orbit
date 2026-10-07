@@ -27,3 +27,31 @@ export function validateBody<TSchema extends z.ZodType>(schema: TSchema): Reques
     next();
   };
 }
+
+export function validateQuery<TSchema extends z.ZodType>(schema: TSchema): RequestHandler {
+  return (request, response, next) => {
+    const result = schema.safeParse(request.query);
+
+    if (!result.success) {
+      next(badRequest("Request query is invalid", flattenZodError(result.error)));
+      return;
+    }
+
+    response.locals.validatedQuery = result.data;
+    next();
+  };
+}
+
+export function validateParams<TSchema extends z.ZodType>(schema: TSchema): RequestHandler {
+  return (request, response, next) => {
+    const result = schema.safeParse(request.params);
+
+    if (!result.success) {
+      next(badRequest("Request params are invalid", flattenZodError(result.error)));
+      return;
+    }
+
+    response.locals.validatedParams = result.data;
+    next();
+  };
+}

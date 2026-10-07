@@ -3,9 +3,18 @@ import type {
   ErrorEnvelope,
   HealthResponse,
   LoginInput,
+  ProjectCreateInput,
+  ProjectDto,
+  ProjectQuery,
+  ProjectUpdateInput,
   RefreshTokenBody,
   RegisterInput,
   SuccessEnvelope,
+  DashboardDto,
+  TaskCreateInput,
+  TaskDto,
+  TaskQuery,
+  TaskUpdateInput,
   UserDto,
 } from "@orbit/shared";
 
@@ -27,6 +36,16 @@ export type OrbitClientOptions = {
 };
 
 export type OrbitClient = ReturnType<typeof createOrbitClient>;
+export type PageMeta = {
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+export type ListResponse<TData> = {
+  items: TData[];
+  meta: PageMeta;
+};
 
 async function parseResponse<TData>(response: Response): Promise<TData> {
   const body = (await response.json()) as SuccessEnvelope<TData> | ErrorEnvelope;
@@ -46,6 +65,19 @@ async function parseResponse<TData>(response: Response): Promise<TData> {
 
 function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/$/, "")}${path}`;
+}
+
+function queryString(query: Record<string, string | number | boolean | undefined>): string {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) {
+      params.set(key, String(value));
+    }
+  }
+
+  const value = params.toString();
+  return value ? `?${value}` : "";
 }
 
 export function createOrbitClient(options: OrbitClientOptions) {
@@ -92,6 +124,39 @@ export function createOrbitClient(options: OrbitClientOptions) {
       await options.onAccessToken?.(undefined);
     },
     me: () => request<UserDto>("/api/auth/me"),
+    dashboard: () => request<DashboardDto>("/api/dashboard"),
+    listProjects: async (query: Partial<ProjectQuery> = {}) => {
+      const path = `/api/projects${queryString(query)}`;
+      const data = await request<ProjectDto[]>(path);
+      return data as ListResponse<ProjectDto>["items"];
+    },
+    createProject: (input: ProjectCreateInput) =>
+      request<ProjectDto>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
+    updateProject: (id: string, input: ProjectUpdateInput) =>
+      request<ProjectDto>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    deleteProject: (id: string) =>
+      request<{ deleted: true }>(`/api/projects/${id}`, { method: "DELETE" }),
+    listTasks: async (query: Partial<TaskQuery> = {}) => {
+      const path = `/api/tasks${queryString(query)}`;
+      const data = await request<TaskDto[]>(path);
+      return data as ListResponse<TaskDto>["items"];
+    },
+    listProjectTasks: async (
+      projectId: string,
+      query: Partial<Omit<TaskQuery, "projectId">> = {}
+    ) => {
+      const path = `/api/projects/${projectId}/tasks${queryString(query)}`;
+      const data = await request<TaskDto[]>(path);
+      return data as ListResponse<TaskDto>["items"];
+    },
+    createTask: (input: TaskCreateInput) =>
+      request<TaskDto>("/api/tasks", { method: "POST", body: JSON.stringify(input) }),
+    updateTask: (id: string, input: TaskUpdateInput) =>
+      request<TaskDto>(`/api/tasks/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    completeTask: (id: string) =>
+      request<TaskDto>(`/api/tasks/${id}/complete`, { method: "POST", body: JSON.stringify({}) }),
+    deleteTask: (id: string) =>
+      request<{ deleted: true }>(`/api/tasks/${id}`, { method: "DELETE" }),
   };
 }
 

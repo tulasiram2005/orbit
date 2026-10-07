@@ -9,8 +9,11 @@ import type { HealthResponse } from "@orbit/shared";
 import type { ApiEnv } from "./config/env.js";
 import { readEnv } from "./config/env.js";
 import { createAuthRouter } from "./auth/auth.routes.js";
+import { createDashboardRouter } from "./dashboard/dashboard.routes.js";
 import { errorHandler } from "./http/error-handler.js";
 import { requestId } from "./http/request-id.js";
+import { createProjectRouter } from "./projects/project.routes.js";
+import { createProjectTasksRouter, createTaskRouter } from "./tasks/task.routes.js";
 
 export function createApp(env: ApiEnv = readEnv()) {
   const app = express();
@@ -47,6 +50,10 @@ export function createApp(env: ApiEnv = readEnv()) {
   });
 
   app.use("/api/auth", createAuthRouter(env));
+  app.use("/api/projects", createProjectTasksRouter(env));
+  app.use("/api/projects", createProjectRouter(env));
+  app.use("/api/tasks", createTaskRouter(env));
+  app.use("/api/dashboard", createDashboardRouter(env));
   app.use(errorHandler);
 
   return app;
