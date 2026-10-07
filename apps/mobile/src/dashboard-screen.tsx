@@ -277,16 +277,22 @@ function HeroHeader({
   return (
     <View style={styles.hero}>
       <View style={styles.heroTop}>
-        <View>
+        <View style={styles.heroIdentity}>
           <Text style={styles.eyebrow}>Orbit</Text>
           <Text style={styles.title}>Command center</Text>
+        </View>
+      </View>
+      <View style={styles.heroMetaRow}>
+        <View style={styles.heroIdentity}>
+          <Text style={styles.heroCopy}>{email}</Text>
+          <Text style={styles.heroSubcopy}>
+            Plan the work, track the motion, keep the day calm.
+          </Text>
         </View>
         <TouchableOpacity disabled={signingOut} onPress={onLogout} style={styles.logoutButton}>
           <Text style={styles.logoutText}>{signingOut ? "Leaving..." : "Sign out"}</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.heroCopy}>{email}</Text>
-      <Text style={styles.heroSubcopy}>Plan the work, track the motion, keep the day calm.</Text>
     </View>
   );
 }
@@ -570,19 +576,19 @@ function ProjectFormView({
         value={form.status}
         onChange={(status) => onChange({ ...form, status })}
       />
-      <View style={styles.row}>
+      <View style={styles.dateStack}>
         <TextInput
           onChangeText={(startDate) => onChange({ ...form, startDate })}
           placeholder="Start YYYY-MM-DD"
           placeholderTextColor="#8A94B2"
-          style={[styles.input, styles.flex]}
+          style={styles.input}
           value={form.startDate}
         />
         <TextInput
           onChangeText={(endDate) => onChange({ ...form, endDate })}
           placeholder="End YYYY-MM-DD"
           placeholderTextColor="#8A94B2"
-          style={[styles.input, styles.flex]}
+          style={styles.input}
           value={form.endDate}
         />
       </View>
