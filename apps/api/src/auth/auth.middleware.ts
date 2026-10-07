@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { TokenExpiredError } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 
 import type { ApiEnv } from "../config/env.js";
 import { tokenExpired, unauthenticated } from "../http/errors.js";
@@ -33,7 +33,7 @@ export function requireAuth(env: ApiEnv): RequestHandler {
       response.locals.auth = { userId: payload.sub };
       next();
     } catch (error) {
-      next(error instanceof TokenExpiredError ? tokenExpired() : unauthenticated());
+      next(error instanceof jwt.TokenExpiredError ? tokenExpired() : unauthenticated());
     }
   };
 }
