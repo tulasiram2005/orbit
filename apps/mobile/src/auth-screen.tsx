@@ -16,6 +16,7 @@ import {
 } from "react-native";
 
 import { styles } from "./auth-styles";
+import { DashboardScreen } from "./dashboard-screen";
 
 const apiUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:4000";
 const accessTokenKey = "orbit_access_token";
@@ -127,6 +128,18 @@ export function AuthScreen() {
   const isOffline = netInfo.isConnected === false;
   const authError = authMutation.error ? messageFor(authMutation.error) : undefined;
 
+  if (user) {
+    return (
+      <DashboardScreen
+        client={client}
+        isOffline={isOffline}
+        onLogout={() => logoutMutation.mutate()}
+        signingOut={logoutMutation.isPending}
+        user={user}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -143,93 +156,73 @@ export function AuthScreen() {
       >
         <View style={styles.card}>
           <Text style={styles.eyebrow}>Orbit</Text>
-          <Text style={styles.title}>
-            {user ? `Welcome, ${user.name}` : mode === "login" ? "Sign in" : "Create account"}
-          </Text>
-          {user ? (
-            <>
-              <Text style={styles.muted}>{user.email}</Text>
-              <Text style={[styles.status, styles.success]}>
-                Signed in and connected to the API.
+          <Text style={styles.title}>{mode === "login" ? "Sign in" : "Create account"}</Text>
+          <>
+            <View style={styles.tabs}>
+              <TouchableOpacity
+                onPress={() => setMode("login")}
+                style={[styles.tab, mode === "login" ? styles.activeTab : null]}
+              >
+                <Text style={[styles.tabText, mode === "login" ? styles.activeTabText : null]}>
+                  Login
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setMode("register")}
+                style={[styles.tab, mode === "register" ? styles.activeTab : null]}
+              >
+                <Text style={[styles.tabText, mode === "register" ? styles.activeTabText : null]}>
+                  Register
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {status ? <Text style={[styles.status, styles.neutral]}>{status}</Text> : null}
+            {isOffline ? (
+              <Text style={[styles.status, styles.warning]}>You are offline.</Text>
+            ) : null}
+            {authError ? <Text style={[styles.status, styles.danger]}>{authError}</Text> : null}
+            {mode === "register" ? (
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={(name) => setForm({ ...form, name })}
+                placeholder="Name"
+                placeholderTextColor="#8A94B2"
+                style={styles.input}
+                value={form.name}
+              />
+            ) : null}
+            <TextInput
+              autoCapitalize="none"
+              inputMode="email"
+              keyboardType="email-address"
+              onChangeText={(email) => setForm({ ...form, email })}
+              placeholder="Email"
+              placeholderTextColor="#8A94B2"
+              style={styles.input}
+              value={form.email}
+            />
+            <TextInput
+              onChangeText={(password) => setForm({ ...form, password })}
+              placeholder="Password"
+              placeholderTextColor="#8A94B2"
+              secureTextEntry
+              style={styles.input}
+              value={form.password}
+            />
+            <TouchableOpacity
+              disabled={authMutation.isPending || isOffline}
+              onPress={() => authMutation.mutate()}
+              style={[styles.button, styles.primaryButton]}
+            >
+              <Text style={styles.buttonText}>
+                {authMutation.isPending
+                  ? "Working..."
+                  : mode === "login"
+                    ? "Sign in"
+                    : "Create account"}
               </Text>
-              <TouchableOpacity
-                disabled={logoutMutation.isPending}
-                onPress={() => logoutMutation.mutate()}
-                style={[styles.button, styles.secondaryButton]}
-              >
-                <Text style={styles.buttonText}>
-                  {logoutMutation.isPending ? "Signing out..." : "Sign out"}
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <View style={styles.tabs}>
-                <TouchableOpacity
-                  onPress={() => setMode("login")}
-                  style={[styles.tab, mode === "login" ? styles.activeTab : null]}
-                >
-                  <Text style={[styles.tabText, mode === "login" ? styles.activeTabText : null]}>
-                    Login
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setMode("register")}
-                  style={[styles.tab, mode === "register" ? styles.activeTab : null]}
-                >
-                  <Text style={[styles.tabText, mode === "register" ? styles.activeTabText : null]}>
-                    Register
-                  </Text>
-                </TouchableOpacity>
-              </View>
-              {status ? <Text style={[styles.status, styles.neutral]}>{status}</Text> : null}
-              {isOffline ? (
-                <Text style={[styles.status, styles.warning]}>You are offline.</Text>
-              ) : null}
-              {authError ? <Text style={[styles.status, styles.danger]}>{authError}</Text> : null}
-              {mode === "register" ? (
-                <TextInput
-                  autoCapitalize="words"
-                  onChangeText={(name) => setForm({ ...form, name })}
-                  placeholder="Name"
-                  placeholderTextColor="#8A94B2"
-                  style={styles.input}
-                  value={form.name}
-                />
-              ) : null}
-              <TextInput
-                autoCapitalize="none"
-                inputMode="email"
-                keyboardType="email-address"
-                onChangeText={(email) => setForm({ ...form, email })}
-                placeholder="Email"
-                placeholderTextColor="#8A94B2"
-                style={styles.input}
-                value={form.email}
-              />
-              <TextInput
-                onChangeText={(password) => setForm({ ...form, password })}
-                placeholder="Password"
-                placeholderTextColor="#8A94B2"
-                secureTextEntry
-                style={styles.input}
-                value={form.password}
-              />
-              <TouchableOpacity
-                disabled={authMutation.isPending || isOffline}
-                onPress={() => authMutation.mutate()}
-                style={[styles.button, styles.primaryButton]}
-              >
-                <Text style={styles.buttonText}>
-                  {authMutation.isPending
-                    ? "Working..."
-                    : mode === "login"
-                      ? "Sign in"
-                      : "Create account"}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+            </TouchableOpacity>
+          </>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
