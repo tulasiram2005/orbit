@@ -45,6 +45,12 @@ export const loginSchema = z
   })
   .strict();
 
+export const refreshTokenBodySchema = z
+  .object({
+    refreshToken: z.string().min(32).max(512).optional(),
+  })
+  .strict();
+
 export const projectCreateSchema = z
   .object({
     name: trimmedString(120),
@@ -128,6 +134,7 @@ export const taskQuerySchema = z
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type RefreshTokenBody = z.infer<typeof refreshTokenBodySchema>;
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
 export type ProjectQuery = z.infer<typeof projectQuerySchema>;

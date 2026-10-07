@@ -1,10 +1,9 @@
-import { portSchema } from "@orbit/config";
-
 import { createApp } from "./app.js";
+import { readEnv } from "./config/env.js";
 
-const port = portSchema.parse(process.env.API_PORT ?? 4000);
-const app = createApp();
+const env = readEnv();
+const app = createApp(env);
 
-app.listen(port, () => {
-  process.stdout.write(`Orbit API listening on ${port}\n`);
+app.listen(env.API_PORT, () => {
+  process.stdout.write(`Orbit API listening on ${env.API_PORT}\n`);
 });

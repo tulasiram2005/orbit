@@ -11,6 +11,7 @@ export default tseslint.config(
       "**/dist/**",
       "**/build/**",
       "**/coverage/**",
+      "**/.corepack/**",
       "**/node_modules/**",
       "**/next-env.d.ts",
     ],

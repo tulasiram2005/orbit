@@ -7,6 +7,17 @@ export type UserDto = {
   createdAt: string;
 };
 
+export type AuthTokensDto = {
+  accessToken: string;
+  refreshToken: string;
+  expiresInSeconds: number;
+};
+
+export type AuthSessionDto = {
+  user: UserDto;
+  tokens: AuthTokensDto;
+};
+
 export type ProjectDto = {
   id: string;
   name: string;
