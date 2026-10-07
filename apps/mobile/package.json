@@ -13,6 +13,7 @@
   "dependencies": {
     "@orbit/api-client": "workspace:*",
     "@orbit/shared": "workspace:*",
+    "@react-native-community/datetimepicker": "^9.2.1",
     "@react-native-community/netinfo": "12.0.1",
     "@tanstack/react-query": "^5.90.3",
     "expo": "^57.0.27",
