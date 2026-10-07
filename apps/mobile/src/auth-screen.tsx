@@ -45,6 +45,7 @@ const emptyForm: AuthForm = {
   name: "",
   password: "",
 };
+const noStoredSessionMessage = "No stored session";
 
 function messageFor(error: unknown): string {
   if (error instanceof OrbitApiError) {
@@ -119,13 +120,17 @@ export function AuthScreen() {
     mutationFn: async () => {
       const refreshToken = await SecureStore.getItemAsync(refreshTokenKey);
       if (!refreshToken) {
-        throw new Error("No session");
+        throw new Error(noStoredSessionMessage);
       }
       return client.refresh({ refreshToken });
     },
     onSuccess: saveSession,
-    onError: async () => {
-      setStatus("");
+    onError: async (error) => {
+      setStatus(
+        error instanceof Error && error.message === noStoredSessionMessage
+          ? ""
+          : "Session expired. Please sign in again."
+      );
       setUser(undefined);
       setAccessToken(undefined);
       await SecureStore.deleteItemAsync(accessTokenKey);

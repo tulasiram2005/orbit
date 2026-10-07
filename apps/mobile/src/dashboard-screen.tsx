@@ -9,8 +9,9 @@ import type {
 } from "@orbit/shared";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
+  Alert,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -33,8 +34,9 @@ type Props = {
   signingOut: boolean;
   user: UserDto;
 };
-
 type Tab = "dashboard" | "projects" | "tasks";
+type Sheet = "project" | "task";
+type DateTarget = "projectStart" | "projectEnd" | "taskDue";
 type ProjectForm = {
   description: string;
   endDate: string;
@@ -49,11 +51,7 @@ type TaskForm = {
   priority: TaskPriority;
   status: TaskStatus;
 };
-type DateTarget = "projectStart" | "projectEnd" | "taskDue";
-type DatePickerState = {
-  target: DateTarget;
-  value: Date;
-};
+type DatePickerState = { target: DateTarget; value: Date };
 
 const emptyProject: ProjectForm = {
   description: "",
@@ -72,9 +70,9 @@ const emptyTask: TaskForm = {
 const projectStatuses: ProjectStatus[] = ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"];
 const taskStatuses: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED"];
 const priorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
-const tabBarHeight = 72;
-const scrollBottomPadding = tabBarHeight + 16;
 const topInset = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
+const scrollBottomPadding = 88;
+const taskPageSize = 10;
 
 function label(value: string): string {
   return value.replace("_", " ").toLowerCase();
@@ -88,76 +86,66 @@ function percent(value: number | null | undefined) {
   return `${value ?? 0}%`;
 }
 
-function isDateOnly(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
 function isRealDate(value: string) {
-  if (!isDateOnly(value)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return date.toISOString().slice(0, 10) === value;
-}
-
-function dateFromValue(value: string) {
-  return isRealDate(value) ? new Date(`${value}T00:00:00.000Z`) : new Date();
+  return new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value;
 }
 
 function formatDate(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function dateFromValue(value: string) {
+  return isRealDate(value) ? new Date(`${value}T00:00:00.000Z`) : new Date();
+}
+
 function apiMessage(error: unknown, fallback: string) {
   if (error instanceof OrbitApiError) {
     return error.message;
   }
-
   return fallback;
 }
 
 function validateProjectForm(form: ProjectForm) {
-  const startDate = form.startDate.trim();
-  const endDate = form.endDate.trim();
-
   if (!form.name.trim()) {
     return "Project name is required.";
   }
-  if (startDate && !isRealDate(startDate)) {
-    return "Start date must be a real YYYY-MM-DD date.";
+  if (form.startDate && !isRealDate(form.startDate)) {
+    return "Start date must be valid.";
   }
-  if (endDate && !isRealDate(endDate)) {
-    return "End date must be a real YYYY-MM-DD date.";
+  if (form.endDate && !isRealDate(form.endDate)) {
+    return "End date must be valid.";
   }
-  if (startDate && endDate && endDate < startDate) {
-    return "End date cannot be before the start date.";
+  if (form.startDate && form.endDate && form.endDate < form.startDate) {
+    return "End date cannot be before start date.";
   }
-
   return undefined;
 }
 
-function validateTaskForm(form: TaskForm, hasProject: boolean) {
-  const dueDate = form.dueDate.trim();
-
-  if (!hasProject) {
+function validateTaskForm(form: TaskForm, projectId: string | undefined) {
+  if (!projectId) {
     return "Select a project before creating a task.";
   }
   if (!form.name.trim()) {
     return "Task name is required.";
   }
-  if (dueDate && !isRealDate(dueDate)) {
-    return "Due date must be a real YYYY-MM-DD date.";
+  if (form.dueDate && !isRealDate(form.dueDate)) {
+    return "Due date must be valid.";
   }
-
   return undefined;
 }
 
 export function DashboardScreen({ client, isOffline, onLogout, signingOut, user }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [sheet, setSheet] = useState<Sheet | undefined>();
   const [projectSearch, setProjectSearch] = useState("");
   const [taskSearch, setTaskSearch] = useState("");
+  const [taskStatus, setTaskStatus] = useState<TaskStatus | "">("");
+  const [taskPriority, setTaskPriority] = useState<TaskPriority | "">("");
+  const [taskPage, setTaskPage] = useState(1);
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
   const [editingProjectId, setEditingProjectId] = useState<string | undefined>();
   const [editingTaskId, setEditingTaskId] = useState<string | undefined>();
@@ -176,10 +164,6 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   });
 
   const projects = projectQuery.data?.items ?? [];
-  const selectedProject = useMemo(
-    () => projects.find((project) => project.id === selectedProjectId),
-    [projects, selectedProjectId]
-  );
 
   const dashboardTasksQuery = useQuery({
     queryKey: ["tasks", "dashboard"],
@@ -187,21 +171,71 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
   });
 
   const taskQuery = useQuery({
-    enabled: Boolean(selectedProject?.id),
-    queryKey: ["tasks", selectedProject?.id, taskSearch],
+    queryKey: ["tasks", selectedProjectId, taskSearch, taskStatus, taskPriority, taskPage],
     queryFn: () =>
-      client.listProjectTasks(selectedProject?.id ?? "", {
-        page: 1,
-        pageSize: 50,
+      client.listTasks({
+        page: taskPage,
+        pageSize: taskPageSize,
+        priority: taskPriority || undefined,
+        projectId: selectedProjectId,
         search: optional(taskSearch),
+        status: taskStatus || undefined,
       }),
   });
+
+  const tasks = taskQuery.data?.items ?? [];
+  const dashboardTasks = dashboardTasksQuery.data?.items ?? [];
+  const refreshing =
+    dashboardQuery.isFetching ||
+    dashboardTasksQuery.isFetching ||
+    projectQuery.isFetching ||
+    taskQuery.isFetching;
+
+  function refreshAll() {
+    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  }
+
+  function updateTaskSearch(value: string) {
+    setTaskSearch(value);
+    setTaskPage(1);
+  }
+
+  function updateTaskStatus(value: TaskStatus | "") {
+    setTaskStatus(value);
+    setTaskPage(1);
+  }
+
+  function updateTaskPriority(value: TaskPriority | "") {
+    setTaskPriority(value);
+    setTaskPage(1);
+  }
+
+  function updateTaskProject(id: string | undefined) {
+    setSelectedProjectId(id);
+    setTaskPage(1);
+  }
 
   function handleScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const nextCollapsed = event.nativeEvent.contentOffset.y > 28;
     if (nextCollapsed !== headerCollapsed) {
       setHeaderCollapsed(nextCollapsed);
     }
+  }
+
+  function resetProjectSheet() {
+    setEditingProjectId(undefined);
+    setProjectForm(emptyProject);
+    setProjectFormError(undefined);
+    setSheet(undefined);
+  }
+
+  function resetTaskSheet() {
+    setEditingTaskId(undefined);
+    setTaskForm(emptyTask);
+    setTaskFormError(undefined);
+    setSheet(undefined);
   }
 
   function openDatePicker(target: DateTarget) {
@@ -211,7 +245,6 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
         : target === "projectEnd"
           ? projectForm.endDate
           : taskForm.dueDate;
-
     setDatePicker({ target, value: dateFromValue(currentValue) });
   }
 
@@ -220,7 +253,6 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
       setDatePicker(undefined);
       return;
     }
-
     const nextValue = formatDate(value);
     if (datePicker.target === "projectStart") {
       setProjectForm({ ...projectForm, startDate: nextValue });
@@ -234,14 +266,7 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
       setTaskForm({ ...taskForm, dueDate: nextValue });
       setTaskFormError(undefined);
     }
-
     setDatePicker(undefined);
-  }
-
-  function refreshAll() {
-    void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    void queryClient.invalidateQueries({ queryKey: ["projects"] });
-    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
   }
 
   const saveProject = useMutation({
@@ -258,11 +283,8 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
         : client.createProject(payload);
     },
     onSuccess: (project) => {
-      setEditingProjectId(undefined);
-      setProjectForm(emptyProject);
-      setProjectFormError(undefined);
       setSelectedProjectId(project.id);
-      setTab("tasks");
+      resetProjectSheet();
       refreshAll();
     },
   });
@@ -277,8 +299,9 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
 
   const saveTask = useMutation({
     mutationFn: () => {
-      if (!selectedProject) {
-        throw new Error("Select a project first.");
+      const validationError = validateTaskForm(taskForm, selectedProjectId);
+      if (validationError) {
+        throw new Error(validationError);
       }
       const payload = {
         description: optional(taskForm.description),
@@ -289,19 +312,58 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
       };
       return editingTaskId
         ? client.updateTask(editingTaskId, payload)
-        : client.createTask({ ...payload, projectId: selectedProject.id });
+        : client.createTask({ ...payload, projectId: selectedProjectId ?? "" });
     },
+    onError: (error) => setTaskFormError(apiMessage(error, "Task could not be saved.")),
     onSuccess: () => {
-      setEditingTaskId(undefined);
-      setTaskForm(emptyTask);
-      setTaskFormError(undefined);
+      resetTaskSheet();
       refreshAll();
     },
   });
 
   const completeTask = useMutation({
-    mutationFn: (taskId: string) => client.completeTask(taskId),
-    onSuccess: refreshAll,
+    mutationFn: (task: TaskDto) =>
+      task.status === "COMPLETED"
+        ? client.updateTask(task.id, {
+            description: task.description ?? undefined,
+            status: "PENDING",
+          })
+        : client.completeTask(task.id),
+    onMutate: async (task) => {
+      await queryClient.cancelQueries({ queryKey: ["tasks"] });
+      const keys = [
+        ["tasks", selectedProjectId, taskSearch, taskStatus, taskPriority],
+        ["tasks", "dashboard"],
+      ] as const;
+      const previous = keys.map((key) => ({
+        data: queryClient.getQueryData<{ items: TaskDto[]; meta: unknown }>(key),
+        key,
+      }));
+      for (const item of previous) {
+        if (!item.data) {
+          continue;
+        }
+        queryClient.setQueryData(item.key, {
+          ...item.data,
+          items: item.data.items.map((existing) =>
+            existing.id === task.id
+              ? {
+                  ...existing,
+                  completedAt: task.status === "COMPLETED" ? undefined : new Date().toISOString(),
+                  status: task.status === "COMPLETED" ? "PENDING" : "COMPLETED",
+                }
+              : existing
+          ),
+        });
+      }
+      return { previous };
+    },
+    onError: (_error, _task, context) => {
+      for (const item of context?.previous ?? []) {
+        queryClient.setQueryData(item.key, item.data);
+      }
+    },
+    onSettled: refreshAll,
   });
 
   const deleteTask = useMutation({
@@ -309,13 +371,64 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
     onSuccess: refreshAll,
   });
 
-  const tasks = taskQuery.data?.items ?? [];
-  const dashboardTasks = dashboardTasksQuery.data?.items ?? [];
-  const refreshing =
-    dashboardQuery.isFetching ||
-    dashboardTasksQuery.isFetching ||
-    projectQuery.isFetching ||
-    taskQuery.isFetching;
+  function submitProject() {
+    const validationError = validateProjectForm(projectForm);
+    if (validationError) {
+      setProjectFormError(validationError);
+      return;
+    }
+    saveProject.mutate();
+  }
+
+  function submitTask() {
+    const validationError = validateTaskForm(taskForm, selectedProjectId);
+    if (validationError) {
+      setTaskFormError(validationError);
+      return;
+    }
+    saveTask.mutate();
+  }
+
+  function editProject(project: ProjectDto) {
+    setEditingProjectId(project.id);
+    setProjectForm({
+      description: project.description ?? "",
+      endDate: project.endDate ?? "",
+      name: project.name,
+      startDate: project.startDate ?? "",
+      status: project.status,
+    });
+    setProjectFormError(undefined);
+    setSheet("project");
+  }
+
+  function editTask(task: TaskDto) {
+    setEditingTaskId(task.id);
+    setSelectedProjectId(task.projectId);
+    setTaskForm({
+      description: task.description ?? "",
+      dueDate: task.dueDate ?? "",
+      name: task.name,
+      priority: task.priority,
+      status: task.status,
+    });
+    setTaskFormError(undefined);
+    setSheet("task");
+  }
+
+  function confirmProjectDelete(project: ProjectDto) {
+    Alert.alert("Delete project?", `Delete "${project.name}" and its tasks?`, [
+      { style: "cancel", text: "Cancel" },
+      { onPress: () => deleteProject.mutate(project.id), style: "destructive", text: "Delete" },
+    ]);
+  }
+
+  function confirmTaskDelete(task: TaskDto) {
+    Alert.alert("Delete task?", `Delete "${task.name}"?`, [
+      { style: "cancel", text: "Cancel" },
+      { onPress: () => deleteTask.mutate(task.id), style: "destructive", text: "Delete" },
+    ]);
+  }
 
   return (
     <SafeAreaView style={styles.safeRoot}>
@@ -331,14 +444,13 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
         <ScrollView
           contentContainerStyle={[styles.screen, { paddingBottom: scrollBottomPadding }]}
           onScroll={handleScroll}
-          scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
+          scrollEventThrottle={16}
         >
           {isOffline ? (
             <Notice tone="warning" text="Offline mode. Changes need a connection." />
           ) : null}
           {dashboardQuery.error ? <Notice tone="danger" text="Dashboard failed to load." /> : null}
-
           {tab === "dashboard" ? (
             <DashboardView
               data={dashboardQuery.data}
@@ -348,111 +460,95 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
               onOpenTasks={() => setTab("tasks")}
             />
           ) : null}
-
           {tab === "projects" ? (
             <ProjectsView
-              activeId={selectedProject?.id}
-              editingProjectId={editingProjectId}
-              form={projectForm}
-              formError={
-                projectFormError ??
-                (saveProject.error
-                  ? apiMessage(saveProject.error, "Project could not be saved.")
-                  : undefined)
-              }
               isLoading={projectQuery.isLoading}
-              isSaving={saveProject.isPending}
-              onChangeForm={(form) => {
-                setProjectForm(form);
-                setProjectFormError(undefined);
-              }}
-              onClearSearch={() => setProjectSearch("")}
-              onDelete={(id) => deleteProject.mutate(id)}
-              onEdit={(project) => {
-                setEditingProjectId(project.id);
-                setProjectForm({
-                  description: project.description ?? "",
-                  endDate: project.endDate ?? "",
-                  name: project.name,
-                  startDate: project.startDate ?? "",
-                  status: project.status,
-                });
-              }}
-              onResetForm={() => {
-                setEditingProjectId(undefined);
+              onAdd={() => {
                 setProjectForm(emptyProject);
-                setProjectFormError(undefined);
+                setEditingProjectId(undefined);
+                setSheet("project");
               }}
-              onSave={() => {
-                const validationError = validateProjectForm(projectForm);
-                if (validationError) {
-                  setProjectFormError(validationError);
-                  return;
-                }
-                saveProject.mutate();
-              }}
+              onDelete={confirmProjectDelete}
+              onEdit={editProject}
               onSearch={setProjectSearch}
-              onSelect={setSelectedProjectId}
-              onShowDatePicker={openDatePicker}
               projects={projects}
               search={projectSearch}
               total={projectQuery.data?.meta.total ?? 0}
             />
           ) : null}
-
           {tab === "tasks" ? (
             <TasksView
-              editingTaskId={editingTaskId}
-              form={taskForm}
-              formError={
-                taskFormError ??
-                (saveTask.error
-                  ? apiMessage(saveTask.error, "Task could not be saved.")
-                  : undefined)
-              }
               isLoading={taskQuery.isLoading}
-              isSaving={saveTask.isPending}
-              onChangeForm={(form) => {
-                setTaskForm(form);
-                setTaskFormError(undefined);
-              }}
-              onClearSearch={() => setTaskSearch("")}
-              onComplete={(id) => completeTask.mutate(id)}
-              onDelete={(id) => deleteTask.mutate(id)}
-              onEdit={(task) => {
-                setEditingTaskId(task.id);
-                setTaskForm({
-                  description: task.description ?? "",
-                  dueDate: task.dueDate ?? "",
-                  name: task.name,
-                  priority: task.priority,
-                  status: task.status,
-                });
-              }}
-              onResetForm={() => {
+              onAdd={() => {
                 setEditingTaskId(undefined);
                 setTaskForm(emptyTask);
                 setTaskFormError(undefined);
+                setSheet("task");
               }}
-              onSave={() => {
-                const validationError = validateTaskForm(taskForm, Boolean(selectedProject));
-                if (validationError) {
-                  setTaskFormError(validationError);
-                  return;
-                }
-                saveTask.mutate();
-              }}
-              onSearch={setTaskSearch}
-              onSelectProject={setSelectedProjectId}
-              onShowDatePicker={openDatePicker}
+              onComplete={(task) => completeTask.mutate(task)}
+              onDelete={confirmTaskDelete}
+              onEdit={editTask}
+              onNextPage={() => setTaskPage((page) => page + 1)}
+              onPrevPage={() => setTaskPage((page) => Math.max(1, page - 1))}
+              onPriority={updateTaskPriority}
+              onProject={updateTaskProject}
+              onSearch={updateTaskSearch}
+              onStatus={updateTaskStatus}
+              page={taskPage}
+              pageSize={taskPageSize}
+              priority={taskPriority}
               projects={projects}
-              selectedProject={selectedProject}
+              projectId={selectedProjectId}
               search={taskSearch}
+              status={taskStatus}
               tasks={tasks}
+              total={taskQuery.data?.meta.total ?? 0}
             />
           ) : null}
         </ScrollView>
         <BottomNav active={tab} onChange={setTab} />
+        {sheet ? (
+          <BottomSheet onClose={sheet === "project" ? resetProjectSheet : resetTaskSheet}>
+            {sheet === "project" ? (
+              <ProjectFormView
+                form={projectForm}
+                formError={
+                  projectFormError ??
+                  (saveProject.error
+                    ? apiMessage(saveProject.error, "Project could not be saved.")
+                    : undefined)
+                }
+                isEditing={Boolean(editingProjectId)}
+                isSaving={saveProject.isPending}
+                onCancel={resetProjectSheet}
+                onChange={(form) => {
+                  setProjectForm(form);
+                  setProjectFormError(undefined);
+                }}
+                onShowDatePicker={openDatePicker}
+                onSubmit={submitProject}
+              />
+            ) : (
+              <TaskFormView
+                disabled={!selectedProjectId}
+                form={taskForm}
+                formError={taskFormError}
+                isEditing={Boolean(editingTaskId)}
+                isSaving={saveTask.isPending}
+                onCancel={resetTaskSheet}
+                onChange={(form) => {
+                  setTaskForm(form);
+                  setTaskFormError(undefined);
+                }}
+                onShowDatePicker={openDatePicker}
+                onSubmit={submitTask}
+                projects={projects}
+                selectedProjectId={selectedProjectId}
+                onSelectProject={setSelectedProjectId}
+              />
+            )}
+          </BottomSheet>
+        ) : null}
         {datePicker ? (
           <DateTimePicker
             display="default"
@@ -481,20 +577,14 @@ function CompactHeader({
   onToggleMenu: () => void;
   signingOut: boolean;
 }) {
-  const initial = email.slice(0, 1).toUpperCase();
-
   return (
     <View style={[styles.appHeader, collapsed ? styles.appHeaderCollapsed : null]}>
       <View style={styles.headerBrand}>
         <Text style={styles.headerTitle}>Orbit</Text>
         {!collapsed ? <Text style={styles.headerSubtitle}>{email}</Text> : null}
       </View>
-      <TouchableOpacity
-        accessibilityLabel="Open profile menu"
-        onPress={onToggleMenu}
-        style={styles.avatarButton}
-      >
-        <Text style={styles.avatarText}>{initial}</Text>
+      <TouchableOpacity onPress={onToggleMenu} style={styles.avatarButton}>
+        <Text style={styles.avatarText}>{email.slice(0, 1).toUpperCase()}</Text>
       </TouchableOpacity>
       {menuOpen ? (
         <View style={styles.profileMenu}>
@@ -526,6 +616,7 @@ function DashboardView({
   data:
     | {
         completedTasks: number;
+        inProgressTasks: number;
         overdueTasks: number;
         pendingTasks: number;
         projectsInProgress: number;
@@ -548,6 +639,7 @@ function DashboardView({
         <Metric label="Total Tasks" tone="primary" value={data?.totalTasks ?? 0} />
         <Metric label="Completed Tasks" tone="success" value={data?.completedTasks ?? 0} />
         <Metric label="Pending Tasks" tone="primary" value={data?.pendingTasks ?? 0} />
+        <Metric label="In Progress Tasks" tone="accent" value={data?.inProgressTasks ?? 0} />
         <Metric label="Projects In Progress" tone="accent" value={data?.projectsInProgress ?? 0} />
         <Metric label="Overdue" tone="warning" value={data?.overdueTasks ?? 0} />
       </View>
@@ -571,64 +663,196 @@ function DashboardView({
           title="Active project"
         />
         {activeProject ? (
-          <ProjectCard active onSelect={onOpenTasks} project={activeProject} />
+          <ProjectCard project={activeProject} />
         ) : (
-          <EmptyState text="Create your first project to see progress here." />
+          <EmptyState text="No projects yet" />
         )}
       </View>
     </View>
   );
 }
 
-function ProjectsView(props: {
-  activeId: string | undefined;
-  editingProjectId: string | undefined;
-  form: ProjectForm;
-  formError: string | undefined;
+function ProjectsView({
+  isLoading,
+  onAdd,
+  onDelete,
+  onEdit,
+  onSearch,
+  projects,
+  search,
+  total,
+}: {
   isLoading: boolean;
-  isSaving: boolean;
-  onChangeForm: (form: ProjectForm) => void;
-  onClearSearch: () => void;
-  onDelete: (id: string) => void;
+  onAdd: () => void;
+  onDelete: (project: ProjectDto) => void;
   onEdit: (project: ProjectDto) => void;
-  onResetForm: () => void;
-  onSave: () => void;
   onSearch: (value: string) => void;
-  onSelect: (id: string) => void;
-  onShowDatePicker: (target: DateTarget) => void;
   projects: ProjectDto[];
   search: string;
   total: number;
 }) {
   return (
     <View style={styles.stack}>
-      <View style={styles.panel}>
-        <SectionTitle meta={`${props.total} total`} title="Projects" />
-        <SearchBox onClear={props.onClearSearch} onSearch={props.onSearch} value={props.search} />
-        <ProjectFormView
-          form={props.form}
-          formError={props.formError}
-          isEditing={Boolean(props.editingProjectId)}
-          isSaving={props.isSaving}
-          onCancel={props.onResetForm}
-          onChange={props.onChangeForm}
-          onShowDatePicker={props.onShowDatePicker}
-          onSubmit={props.onSave}
-        />
-      </View>
+      <SectionTitle meta={`${total} total`} title="Projects" />
+      <SearchBox onClear={() => onSearch("")} onSearch={onSearch} value={search} />
       <View style={styles.list}>
-        {props.isLoading ? <EmptyState text="Loading projects..." /> : null}
-        {!props.isLoading && props.projects.length === 0 ? (
-          <EmptyState text="No projects match this view." />
-        ) : null}
-        {props.projects.map((project) => (
+        {isLoading ? <EmptyState text="Loading projects..." /> : null}
+        {!isLoading && projects.length === 0 ? <EmptyState text="No projects yet" /> : null}
+        {projects.map((project) => (
           <ProjectCard
-            active={props.activeId === project.id}
             key={project.id}
-            onDelete={() => props.onDelete(project.id)}
-            onEdit={() => props.onEdit(project)}
-            onSelect={() => props.onSelect(project.id)}
+            onDelete={() => onDelete(project)}
+            onEdit={() => onEdit(project)}
             project={project}
+          />
+        ))}
+      </View>
+      <FloatingButton onPress={onAdd} />
+    </View>
+  );
+}
+
+function TasksView({
+  isLoading,
+  onAdd,
+  onComplete,
+  onDelete,
+  onEdit,
+  onNextPage,
+  onPrevPage,
+  onPriority,
+  onProject,
+  onSearch,
+  onStatus,
+  page,
+  pageSize,
+  priority,
+  projects,
+  projectId,
+  search,
+  status,
+  tasks,
+  total,
+}: {
+  isLoading: boolean;
+  onAdd: () => void;
+  onComplete: (task: TaskDto) => void;
+  onDelete: (task: TaskDto) => void;
+  onEdit: (task: TaskDto) => void;
+  onNextPage: () => void;
+  onPrevPage: () => void;
+  onPriority: (priority: TaskPriority | "") => void;
+  onProject: (id: string | undefined) => void;
+  onSearch: (value: string) => void;
+  onStatus: (status: TaskStatus | "") => void;
+  page: number;
+  pageSize: number;
+  priority: TaskPriority | "";
+  projects: ProjectDto[];
+  projectId: string | undefined;
+  search: string;
+  status: TaskStatus | "";
+  tasks: TaskDto[];
+  total: number;
+}) {
+  const filtered = Boolean(search || status || priority || projectId);
+  const hasNextPage = page * pageSize < total;
+
+  return (
+    <View style={styles.stack}>
+      <SectionTitle meta={`${total} total`} title="Tasks" />
+      <SearchBox onClear={() => onSearch("")} onSearch={onSearch} value={search} />
+      <FilterBar
+        onPriority={onPriority}
+        onProject={onProject}
+        onStatus={onStatus}
+        priority={priority}
+        projects={projects}
+        projectId={projectId}
+        status={status}
+      />
+      <View style={styles.list}>
+        {isLoading ? <EmptyState text="Loading tasks..." /> : null}
+        {!isLoading && tasks.length === 0 ? (
+          <EmptyState text={filtered ? "No tasks match your filters" : "No tasks yet"} />
+        ) : null}
+        {tasks.map((task) => (
+          <TaskRow
+            key={task.id}
+            onComplete={() => onComplete(task)}
+            onDelete={() => onDelete(task)}
+            onEdit={() => onEdit(task)}
+            task={task}
+          />
+        ))}
+      </View>
+      {total > pageSize ? (
+        <View style={styles.pagination}>
+          <TouchableOpacity
+            disabled={page === 1}
+            onPress={onPrevPage}
+            style={[styles.pageButton, page === 1 ? styles.disabledAction : null]}
+          >
+            <Text style={styles.pageButtonText}>Previous</Text>
+          </TouchableOpacity>
+          <Text style={styles.pageText}>Page {page}</Text>
+          <TouchableOpacity
+            disabled={!hasNextPage}
+            onPress={onNextPage}
+            style={[styles.pageButton, !hasNextPage ? styles.disabledAction : null]}
+          >
+            <Text style={styles.pageButtonText}>Next</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+      <FloatingButton onPress={onAdd} />
+    </View>
+  );
+}
+
+function FilterBar({
+  onPriority,
+  onProject,
+  onStatus,
+  priority,
+  projects,
+  projectId,
+  status,
+}: {
+  onPriority: (priority: TaskPriority | "") => void;
+  onProject: (id: string | undefined) => void;
+  onStatus: (status: TaskStatus | "") => void;
+  priority: TaskPriority | "";
+  projects: ProjectDto[];
+  projectId: string | undefined;
+  status: TaskStatus | "";
+}) {
+  return (
+    <View style={styles.filterPanel}>
+      <ChipRow
+        items={[
+          { label: "All", value: "" },
+          ...taskStatuses.map((item) => ({ label: label(item), value: item })),
+        ]}
+        onChange={onStatus}
+        value={status}
+      />
+      <ChipRow
+        items={[
+          { label: "All", value: "" },
+          ...priorities.map((item) => ({ label: label(item), value: item })),
+        ]}
+        onChange={onPriority}
+        value={priority}
+      />
+      <View style={styles.projectSelector}>
+        <Chip active={!projectId} label="All projects" onPress={() => onProject(undefined)} />
+        {projects.map((project) => (
+          <Chip
+            active={projectId === project.id}
+            key={project.id}
+            label={project.name}
+            onPress={() => onProject(project.id)}
           />
         ))}
       </View>
@@ -636,68 +860,47 @@ function ProjectsView(props: {
   );
 }
 
-function TasksView(props: {
-  editingTaskId: string | undefined;
-  form: TaskForm;
-  formError: string | undefined;
-  isLoading: boolean;
-  isSaving: boolean;
-  onChangeForm: (form: TaskForm) => void;
-  onClearSearch: () => void;
-  onComplete: (id: string) => void;
-  onDelete: (id: string) => void;
-  onEdit: (task: TaskDto) => void;
-  onResetForm: () => void;
-  onSave: () => void;
-  onSearch: (value: string) => void;
-  onSelectProject: (id: string) => void;
-  onShowDatePicker: (target: DateTarget) => void;
-  projects: ProjectDto[];
-  search: string;
-  selectedProject: ProjectDto | undefined;
-  tasks: TaskDto[];
+function ChipRow<T extends string>({
+  items,
+  onChange,
+  value,
+}: {
+  items: { label: string; value: T }[];
+  onChange: (value: T) => void;
+  value: T;
 }) {
   return (
-    <View style={styles.stack}>
-      <View style={styles.panel}>
-        <SectionTitle
-          meta={props.selectedProject ? "Project selected" : "Select project"}
-          title="Tasks"
+    <View style={styles.projectSelector}>
+      {items.map((item) => (
+        <Chip
+          active={value === item.value}
+          key={item.value || "all"}
+          label={item.label}
+          onPress={() => onChange(item.value)}
         />
-        <ProjectSelector
-          onSelect={props.onSelectProject}
-          projects={props.projects}
-          selectedId={props.selectedProject?.id}
-        />
-        <SearchBox onClear={props.onClearSearch} onSearch={props.onSearch} value={props.search} />
-        <TaskFormView
-          disabled={!props.selectedProject}
-          form={props.form}
-          formError={props.formError}
-          isEditing={Boolean(props.editingTaskId)}
-          isSaving={props.isSaving}
-          onCancel={props.onResetForm}
-          onChange={props.onChangeForm}
-          onShowDatePicker={props.onShowDatePicker}
-          onSubmit={props.onSave}
-        />
-      </View>
-      <View style={styles.list}>
-        {props.isLoading ? <EmptyState text="Loading tasks..." /> : null}
-        {!props.isLoading && props.tasks.length === 0 ? (
-          <EmptyState text="No tasks match this project." />
-        ) : null}
-        {props.tasks.map((task) => (
-          <TaskCard
-            key={task.id}
-            onComplete={() => props.onComplete(task.id)}
-            onDelete={() => props.onDelete(task.id)}
-            onEdit={() => props.onEdit(task)}
-            task={task}
-          />
-        ))}
-      </View>
+      ))}
     </View>
+  );
+}
+
+function Chip({
+  active,
+  label: chipLabel,
+  onPress,
+}: {
+  active: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.projectChoice, active ? styles.projectChoiceActive : null]}
+    >
+      <Text style={[styles.projectChoiceText, active ? styles.projectChoiceTextActive : null]}>
+        {chipLabel}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -778,7 +981,7 @@ function Segment<T extends string>({
   );
 }
 
-function ProjectSelector({
+function ProjectPicker({
   onSelect,
   projects,
   selectedId,
@@ -790,27 +993,15 @@ function ProjectSelector({
   if (projects.length === 0) {
     return <EmptyState text="Create a project before adding tasks." />;
   }
-
   return (
     <View style={styles.projectSelector}>
       {projects.map((project) => (
-        <TouchableOpacity
+        <Chip
+          active={selectedId === project.id}
           key={project.id}
+          label={project.name}
           onPress={() => onSelect(project.id)}
-          style={[
-            styles.projectChoice,
-            selectedId === project.id ? styles.projectChoiceActive : null,
-          ]}
-        >
-          <Text
-            style={[
-              styles.projectChoiceText,
-              selectedId === project.id ? styles.projectChoiceTextActive : null,
-            ]}
-          >
-            {project.name}
-          </Text>
-        </TouchableOpacity>
+        />
       ))}
     </View>
   );
@@ -867,6 +1058,7 @@ function ProjectFormView({
 }) {
   return (
     <View style={styles.form}>
+      <SectionTitle meta={isEditing ? "Edit project" : "New project"} title="Project" />
       <TextInput
         onChangeText={(name) => onChange({ ...form, name })}
         placeholder="Project name"
@@ -908,7 +1100,7 @@ function ProjectFormView({
           label={isSaving ? "Saving..." : isEditing ? "Update" : "Create"}
           onPress={onSubmit}
         />
-        {isEditing ? <ActionButton label="Cancel" onPress={onCancel} secondary /> : null}
+        <ActionButton label="Cancel" onPress={onCancel} secondary />
       </View>
     </View>
   );
@@ -922,8 +1114,11 @@ function TaskFormView({
   isSaving,
   onCancel,
   onChange,
+  onSelectProject,
   onShowDatePicker,
   onSubmit,
+  projects,
+  selectedProjectId,
 }: {
   disabled: boolean;
   form: TaskForm;
@@ -932,11 +1127,20 @@ function TaskFormView({
   isSaving: boolean;
   onCancel: () => void;
   onChange: (form: TaskForm) => void;
+  onSelectProject: (id: string) => void;
   onShowDatePicker: (target: DateTarget) => void;
   onSubmit: () => void;
+  projects: ProjectDto[];
+  selectedProjectId: string | undefined;
 }) {
   return (
     <View style={styles.form}>
+      <SectionTitle meta={isEditing ? "Edit task" : "New task"} title="Task" />
+      <ProjectPicker
+        onSelect={onSelectProject}
+        projects={projects}
+        selectedId={selectedProjectId}
+      />
       <TextInput
         editable={!disabled}
         onChangeText={(name) => onChange({ ...form, name })}
@@ -978,27 +1182,23 @@ function TaskFormView({
           label={isSaving ? "Saving..." : isEditing ? "Update" : "Create"}
           onPress={onSubmit}
         />
-        {isEditing ? <ActionButton label="Cancel" onPress={onCancel} secondary /> : null}
+        <ActionButton label="Cancel" onPress={onCancel} secondary />
       </View>
     </View>
   );
 }
 
 function ProjectCard({
-  active,
   onDelete,
   onEdit,
-  onSelect,
   project,
 }: {
-  active?: boolean;
   onDelete?: () => void;
   onEdit?: () => void;
-  onSelect: () => void;
   project: ProjectDto;
 }) {
   return (
-    <TouchableOpacity onPress={onSelect} style={[styles.item, active ? styles.activeItem : null]}>
+    <View style={styles.item}>
       <View style={styles.itemTop}>
         <View style={styles.flex}>
           <Text style={styles.itemTitle}>{project.name}</Text>
@@ -1021,11 +1221,11 @@ function ProjectCard({
           <InlineButton danger label="Delete" onPress={onDelete} />
         </View>
       ) : null}
-    </TouchableOpacity>
+    </View>
   );
 }
 
-function TaskCard({
+function TaskRow({
   onComplete,
   onDelete,
   onEdit,
@@ -1037,28 +1237,29 @@ function TaskCard({
   task: TaskDto;
 }) {
   const complete = task.status === "COMPLETED";
-
   return (
-    <View style={[styles.item, complete ? styles.completeItem : null]}>
+    <TouchableOpacity onPress={onEdit} style={[styles.item, complete ? styles.completeItem : null]}>
       <View style={styles.itemTop}>
+        <TouchableOpacity onPress={onComplete} style={styles.checkbox}>
+          <Text style={styles.checkboxText}>{complete ? "✓" : ""}</Text>
+        </TouchableOpacity>
         <View style={styles.flex}>
           <Text style={styles.itemTitle}>{task.name}</Text>
           <Text style={styles.itemMeta}>
             {label(task.status)} / {label(task.priority)}
           </Text>
+          {task.dueDate ? <Text style={styles.itemMeta}>Due {task.dueDate}</Text> : null}
         </View>
         <Text style={[styles.badge, task.priority === "HIGH" ? styles.hotBadge : null]}>
           {label(task.priority)}
         </Text>
       </View>
       {task.description ? <Text style={styles.itemBody}>{task.description}</Text> : null}
-      {task.dueDate ? <Text style={styles.itemMeta}>Due {task.dueDate}</Text> : null}
       <View style={styles.inlineActions}>
-        {!complete ? <InlineButton label="Complete" onPress={onComplete} /> : null}
-        <InlineButton label="Edit" onPress={onEdit} />
+        <InlineButton label="Details" onPress={onEdit} />
         <InlineButton danger label="Delete" onPress={onDelete} />
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -1104,6 +1305,23 @@ function InlineButton({
   );
 }
 
+function FloatingButton({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={styles.fab}>
+      <Text style={styles.fabText}>+</Text>
+    </TouchableOpacity>
+  );
+}
+
+function BottomSheet({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+  return (
+    <View style={styles.sheetBackdrop}>
+      <TouchableOpacity onPress={onClose} style={styles.sheetScrim} />
+      <View style={styles.sheet}>{children}</View>
+    </View>
+  );
+}
+
 function Notice({ text, tone }: { text: string; tone: "danger" | "warning" }) {
   return <Text style={[styles.notice, styles[tone]]}>{text}</Text>;
 }
@@ -1112,7 +1330,7 @@ function EmptyState({ text }: { text: string }) {
   return (
     <View style={styles.emptyState}>
       <Text style={styles.emptyTitle}>{text}</Text>
-      <Text style={styles.emptyText}>Pull to refresh or create something new.</Text>
+      <Text style={styles.emptyText}>Pull to refresh or adjust your filters.</Text>
     </View>
   );
 }

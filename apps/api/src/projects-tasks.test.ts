@@ -199,6 +199,9 @@ describe("project and task routes", () => {
     expect(dashboard.totalProjects).toBe(1);
     expect(dashboard.totalTasks).toBe(1);
     expect(dashboard.completedTasks).toBe(1);
+    expect(dashboard.completedTasks + dashboard.pendingTasks + dashboard.inProgressTasks).toBe(
+      dashboard.totalTasks
+    );
     expect(dashboard.projectsInProgress).toBe(1);
   });
 });
