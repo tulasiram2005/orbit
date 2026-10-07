@@ -1,0 +1,13 @@
+node_modules
+.corepack
+.env
+.env.*
+!.env.example
+dist
+build
+coverage
+.next
+.expo
+expo-env.d.ts
+*.log
+*.tsbuildinfo
