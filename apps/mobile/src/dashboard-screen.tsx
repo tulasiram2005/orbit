@@ -21,6 +21,7 @@ type Props = {
   user: UserDto;
 };
 
+type Tab = "dashboard" | "projects" | "tasks";
 type ProjectForm = {
   description: string;
   endDate: string;
@@ -28,7 +29,6 @@ type ProjectForm = {
   startDate: string;
   status: ProjectStatus;
 };
-
 type TaskForm = {
   description: string;
   dueDate: string;
@@ -44,7 +44,6 @@ const emptyProject: ProjectForm = {
   startDate: "",
   status: "NOT_STARTED",
 };
-
 const emptyTask: TaskForm = {
   description: "",
   dueDate: "",
@@ -52,7 +51,6 @@ const emptyTask: TaskForm = {
   priority: "MEDIUM",
   status: "PENDING",
 };
-
 const projectStatuses: ProjectStatus[] = ["NOT_STARTED", "IN_PROGRESS", "COMPLETED"];
 const taskStatuses: TaskStatus[] = ["PENDING", "IN_PROGRESS", "COMPLETED"];
 const priorities: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
@@ -65,8 +63,13 @@ function optional(value: string) {
   return value.trim() || undefined;
 }
 
+function percent(value: number | null | undefined) {
+  return `${value ?? 0}%`;
+}
+
 export function DashboardScreen({ client, isOffline, onLogout, signingOut, user }: Props) {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [projectSearch, setProjectSearch] = useState("");
   const [taskSearch, setTaskSearch] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>();
@@ -121,6 +124,7 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
       setEditingProjectId(undefined);
       setProjectForm(emptyProject);
       setSelectedProjectId(project.id);
+      setTab("tasks");
       refreshAll();
     },
   });
@@ -166,120 +170,303 @@ export function DashboardScreen({ client, isOffline, onLogout, signingOut, user 
     onSuccess: refreshAll,
   });
 
+  const tasks = taskQuery.data?.items ?? [];
   const refreshing = dashboardQuery.isFetching || projectQuery.isFetching || taskQuery.isFetching;
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.screen}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
-    >
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.eyebrow}>Orbit</Text>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.muted}>{user.email}</Text>
-        </View>
-        <TouchableOpacity disabled={signingOut} onPress={onLogout} style={styles.secondaryButton}>
-          <Text style={styles.buttonText}>{signingOut ? "Signing out..." : "Sign out"}</Text>
-        </TouchableOpacity>
-      </View>
+    <View style={styles.root}>
+      <ScrollView
+        contentContainerStyle={styles.screen}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} />}
+      >
+        <HeroHeader email={user.email} onLogout={onLogout} signingOut={signingOut} />
+        {isOffline ? (
+          <Notice tone="warning" text="Offline mode. Changes need a connection." />
+        ) : null}
+        {dashboardQuery.error ? <Notice tone="danger" text="Dashboard failed to load." /> : null}
 
-      {isOffline ? <Text style={[styles.notice, styles.warning]}>You are offline.</Text> : null}
-      {dashboardQuery.error ? (
-        <Text style={[styles.notice, styles.danger]}>Dashboard failed to load.</Text>
-      ) : null}
+        {tab === "dashboard" ? (
+          <DashboardView
+            data={dashboardQuery.data}
+            projects={projects}
+            tasks={tasks}
+            onOpenProjects={() => setTab("projects")}
+            onOpenTasks={() => setTab("tasks")}
+          />
+        ) : null}
 
-      <View style={styles.metrics}>
-        <Metric label="Projects" value={dashboardQuery.data?.totalProjects ?? 0} />
-        <Metric label="Tasks" value={dashboardQuery.data?.totalTasks ?? 0} />
-        <Metric label="Done" value={dashboardQuery.data?.completedTasks ?? 0} />
-        <Metric label="Overdue" value={dashboardQuery.data?.overdueTasks ?? 0} />
-      </View>
+        {tab === "projects" ? (
+          <ProjectsView
+            activeId={selectedProject?.id}
+            editingProjectId={editingProjectId}
+            form={projectForm}
+            isLoading={projectQuery.isLoading}
+            isSaving={saveProject.isPending}
+            onChangeForm={setProjectForm}
+            onClearSearch={() => setProjectSearch("")}
+            onDelete={(id) => deleteProject.mutate(id)}
+            onEdit={(project) => {
+              setEditingProjectId(project.id);
+              setProjectForm({
+                description: project.description ?? "",
+                endDate: project.endDate ?? "",
+                name: project.name,
+                startDate: project.startDate ?? "",
+                status: project.status,
+              });
+            }}
+            onResetForm={() => {
+              setEditingProjectId(undefined);
+              setProjectForm(emptyProject);
+            }}
+            onSave={() => saveProject.mutate()}
+            onSearch={setProjectSearch}
+            onSelect={setSelectedProjectId}
+            projects={projects}
+            search={projectSearch}
+            total={projectQuery.data?.meta.total ?? 0}
+          />
+        ) : null}
 
-      <View style={styles.card}>
-        <SectionTitle title="Projects" meta={`${projectQuery.data?.meta.total ?? 0} total`} />
-        <TextInput
-          onChangeText={setProjectSearch}
-          placeholder="Search projects"
-          placeholderTextColor="#8A94B2"
-          style={styles.input}
-          value={projectSearch}
-        />
-        <ProjectFormView
-          form={projectForm}
-          isEditing={Boolean(editingProjectId)}
-          isSaving={saveProject.isPending}
-          onCancel={() => {
-            setEditingProjectId(undefined);
-            setProjectForm(emptyProject);
-          }}
-          onChange={setProjectForm}
-          onSubmit={() => saveProject.mutate()}
-        />
-        <ProjectList
-          activeId={selectedProject?.id}
-          isLoading={projectQuery.isLoading}
-          onDelete={(id) => deleteProject.mutate(id)}
-          onEdit={(project) => {
-            setEditingProjectId(project.id);
-            setProjectForm({
-              description: project.description ?? "",
-              endDate: project.endDate ?? "",
-              name: project.name,
-              startDate: project.startDate ?? "",
-              status: project.status,
-            });
-          }}
-          onSelect={setSelectedProjectId}
-          projects={projects}
-        />
-      </View>
-
-      <View style={styles.card}>
-        <SectionTitle title="Tasks" meta={selectedProject?.name ?? "Select a project"} />
-        <TextInput
-          onChangeText={setTaskSearch}
-          placeholder="Search tasks"
-          placeholderTextColor="#8A94B2"
-          style={styles.input}
-          value={taskSearch}
-        />
-        <TaskFormView
-          disabled={!selectedProject}
-          form={taskForm}
-          isEditing={Boolean(editingTaskId)}
-          isSaving={saveTask.isPending}
-          onCancel={() => {
-            setEditingTaskId(undefined);
-            setTaskForm(emptyTask);
-          }}
-          onChange={setTaskForm}
-          onSubmit={() => saveTask.mutate()}
-        />
-        <TaskList
-          isLoading={taskQuery.isLoading}
-          onComplete={(id) => completeTask.mutate(id)}
-          onDelete={(id) => deleteTask.mutate(id)}
-          onEdit={(task) => {
-            setEditingTaskId(task.id);
-            setTaskForm({
-              description: task.description ?? "",
-              dueDate: task.dueDate ?? "",
-              name: task.name,
-              priority: task.priority,
-              status: task.status,
-            });
-          }}
-          tasks={taskQuery.data?.items ?? []}
-        />
-      </View>
-    </ScrollView>
+        {tab === "tasks" ? (
+          <TasksView
+            editingTaskId={editingTaskId}
+            form={taskForm}
+            isLoading={taskQuery.isLoading}
+            isSaving={saveTask.isPending}
+            onChangeForm={setTaskForm}
+            onClearSearch={() => setTaskSearch("")}
+            onComplete={(id) => completeTask.mutate(id)}
+            onDelete={(id) => deleteTask.mutate(id)}
+            onEdit={(task) => {
+              setEditingTaskId(task.id);
+              setTaskForm({
+                description: task.description ?? "",
+                dueDate: task.dueDate ?? "",
+                name: task.name,
+                priority: task.priority,
+                status: task.status,
+              });
+            }}
+            onResetForm={() => {
+              setEditingTaskId(undefined);
+              setTaskForm(emptyTask);
+            }}
+            onSave={() => saveTask.mutate()}
+            onSearch={setTaskSearch}
+            selectedProject={selectedProject}
+            search={taskSearch}
+            tasks={tasks}
+          />
+        ) : null}
+      </ScrollView>
+      <BottomNav active={tab} onChange={setTab} />
+    </View>
   );
 }
 
-function Metric({ label: metricLabel, value }: { label: string; value: number }) {
+function HeroHeader({
+  email,
+  onLogout,
+  signingOut,
+}: {
+  email: string;
+  onLogout: () => void;
+  signingOut: boolean;
+}) {
   return (
-    <View style={styles.metric}>
+    <View style={styles.hero}>
+      <View style={styles.heroTop}>
+        <View>
+          <Text style={styles.eyebrow}>Orbit</Text>
+          <Text style={styles.title}>Command center</Text>
+        </View>
+        <TouchableOpacity disabled={signingOut} onPress={onLogout} style={styles.logoutButton}>
+          <Text style={styles.logoutText}>{signingOut ? "Leaving..." : "Sign out"}</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.heroCopy}>{email}</Text>
+      <Text style={styles.heroSubcopy}>Plan the work, track the motion, keep the day calm.</Text>
+    </View>
+  );
+}
+
+function DashboardView({
+  data,
+  onOpenProjects,
+  onOpenTasks,
+  projects,
+  tasks,
+}: {
+  data:
+    | {
+        completedTasks: number;
+        overdueTasks: number;
+        pendingTasks: number;
+        projectsInProgress: number;
+        totalProjects: number;
+        totalTasks: number;
+      }
+    | undefined;
+  onOpenProjects: () => void;
+  onOpenTasks: () => void;
+  projects: ProjectDto[];
+  tasks: TaskDto[];
+}) {
+  const nextTask = tasks.find((task) => task.status !== "COMPLETED") ?? tasks[0];
+  const activeProject = projects.find((project) => project.status === "IN_PROGRESS") ?? projects[0];
+
+  return (
+    <View style={styles.stack}>
+      <View style={styles.metricsGrid}>
+        <Metric label="Projects" tone="accent" value={data?.totalProjects ?? 0} />
+        <Metric label="Tasks" tone="primary" value={data?.totalTasks ?? 0} />
+        <Metric label="Done" tone="success" value={data?.completedTasks ?? 0} />
+        <Metric label="Overdue" tone="warning" value={data?.overdueTasks ?? 0} />
+      </View>
+      <View style={styles.panel}>
+        <SectionTitle meta={`${data?.pendingTasks ?? 0} pending`} title="Today" />
+        <View style={styles.focusCard}>
+          <Text style={styles.focusLabel}>Next task</Text>
+          <Text style={styles.focusTitle}>{nextTask?.name ?? "No task selected"}</Text>
+          <Text style={styles.focusMeta}>
+            {nextTask ? `${label(nextTask.priority)} priority` : "Create a task to begin."}
+          </Text>
+        </View>
+        <View style={styles.quickActions}>
+          <ActionButton label="Projects" onPress={onOpenProjects} secondary />
+          <ActionButton label="Tasks" onPress={onOpenTasks} />
+        </View>
+      </View>
+      <View style={styles.panel}>
+        <SectionTitle
+          meta={`${data?.projectsInProgress ?? 0} in progress`}
+          title="Active project"
+        />
+        {activeProject ? (
+          <ProjectCard active onSelect={onOpenTasks} project={activeProject} />
+        ) : (
+          <EmptyState text="Create your first project to see progress here." />
+        )}
+      </View>
+    </View>
+  );
+}
+
+function ProjectsView(props: {
+  activeId: string | undefined;
+  editingProjectId: string | undefined;
+  form: ProjectForm;
+  isLoading: boolean;
+  isSaving: boolean;
+  onChangeForm: (form: ProjectForm) => void;
+  onClearSearch: () => void;
+  onDelete: (id: string) => void;
+  onEdit: (project: ProjectDto) => void;
+  onResetForm: () => void;
+  onSave: () => void;
+  onSearch: (value: string) => void;
+  onSelect: (id: string) => void;
+  projects: ProjectDto[];
+  search: string;
+  total: number;
+}) {
+  return (
+    <View style={styles.stack}>
+      <View style={styles.panel}>
+        <SectionTitle meta={`${props.total} total`} title="Projects" />
+        <SearchBox onClear={props.onClearSearch} onSearch={props.onSearch} value={props.search} />
+        <ProjectFormView
+          form={props.form}
+          isEditing={Boolean(props.editingProjectId)}
+          isSaving={props.isSaving}
+          onCancel={props.onResetForm}
+          onChange={props.onChangeForm}
+          onSubmit={props.onSave}
+        />
+      </View>
+      <View style={styles.list}>
+        {props.isLoading ? <EmptyState text="Loading projects..." /> : null}
+        {!props.isLoading && props.projects.length === 0 ? (
+          <EmptyState text="No projects match this view." />
+        ) : null}
+        {props.projects.map((project) => (
+          <ProjectCard
+            active={props.activeId === project.id}
+            key={project.id}
+            onDelete={() => props.onDelete(project.id)}
+            onEdit={() => props.onEdit(project)}
+            onSelect={() => props.onSelect(project.id)}
+            project={project}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TasksView(props: {
+  editingTaskId: string | undefined;
+  form: TaskForm;
+  isLoading: boolean;
+  isSaving: boolean;
+  onChangeForm: (form: TaskForm) => void;
+  onClearSearch: () => void;
+  onComplete: (id: string) => void;
+  onDelete: (id: string) => void;
+  onEdit: (task: TaskDto) => void;
+  onResetForm: () => void;
+  onSave: () => void;
+  onSearch: (value: string) => void;
+  search: string;
+  selectedProject: ProjectDto | undefined;
+  tasks: TaskDto[];
+}) {
+  return (
+    <View style={styles.stack}>
+      <View style={styles.panel}>
+        <SectionTitle meta={props.selectedProject?.name ?? "Select a project"} title="Tasks" />
+        <SearchBox onClear={props.onClearSearch} onSearch={props.onSearch} value={props.search} />
+        <TaskFormView
+          disabled={!props.selectedProject}
+          form={props.form}
+          isEditing={Boolean(props.editingTaskId)}
+          isSaving={props.isSaving}
+          onCancel={props.onResetForm}
+          onChange={props.onChangeForm}
+          onSubmit={props.onSave}
+        />
+      </View>
+      <View style={styles.list}>
+        {props.isLoading ? <EmptyState text="Loading tasks..." /> : null}
+        {!props.isLoading && props.tasks.length === 0 ? (
+          <EmptyState text="No tasks match this project." />
+        ) : null}
+        {props.tasks.map((task) => (
+          <TaskCard
+            key={task.id}
+            onComplete={() => props.onComplete(task.id)}
+            onDelete={() => props.onDelete(task.id)}
+            onEdit={() => props.onEdit(task)}
+            task={task}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function Metric({
+  label: metricLabel,
+  tone,
+  value,
+}: {
+  label: string;
+  tone: "accent" | "primary" | "success" | "warning";
+  value: number;
+}) {
+  return (
+    <View style={[styles.metric, styles[`${tone}Metric`]]}>
       <Text style={styles.metricLabel}>{metricLabel}</Text>
       <Text style={styles.metricValue}>{value}</Text>
     </View>
@@ -291,6 +478,31 @@ function SectionTitle({ meta, title }: { meta: string; title: string }) {
     <View style={styles.sectionTitle}>
       <Text style={styles.sectionHeading}>{title}</Text>
       <Text style={styles.muted}>{meta}</Text>
+    </View>
+  );
+}
+
+function SearchBox({
+  onClear,
+  onSearch,
+  value,
+}: {
+  onClear: () => void;
+  onSearch: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <View style={styles.searchRow}>
+      <TextInput
+        onChangeText={onSearch}
+        placeholder="Search"
+        placeholderTextColor="#8A94B2"
+        style={[styles.input, styles.flex]}
+        value={value}
+      />
+      <TouchableOpacity onPress={onClear} style={styles.clearButton}>
+        <Text style={styles.clearText}>Clear</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -339,18 +551,19 @@ function ProjectFormView({
   return (
     <View style={styles.form}>
       <TextInput
+        onChangeText={(name) => onChange({ ...form, name })}
         placeholder="Project name"
         placeholderTextColor="#8A94B2"
         style={styles.input}
         value={form.name}
-        onChangeText={(name) => onChange({ ...form, name })}
       />
       <TextInput
+        multiline
+        onChangeText={(description) => onChange({ ...form, description })}
         placeholder="Description"
         placeholderTextColor="#8A94B2"
-        style={styles.input}
+        style={[styles.input, styles.textArea]}
         value={form.description}
-        onChangeText={(description) => onChange({ ...form, description })}
       />
       <Segment
         options={projectStatuses}
@@ -359,24 +572,24 @@ function ProjectFormView({
       />
       <View style={styles.row}>
         <TextInput
+          onChangeText={(startDate) => onChange({ ...form, startDate })}
           placeholder="Start YYYY-MM-DD"
           placeholderTextColor="#8A94B2"
           style={[styles.input, styles.flex]}
           value={form.startDate}
-          onChangeText={(startDate) => onChange({ ...form, startDate })}
         />
         <TextInput
+          onChangeText={(endDate) => onChange({ ...form, endDate })}
           placeholder="End YYYY-MM-DD"
           placeholderTextColor="#8A94B2"
           style={[styles.input, styles.flex]}
           value={form.endDate}
-          onChangeText={(endDate) => onChange({ ...form, endDate })}
         />
       </View>
       <View style={styles.row}>
         <ActionButton
           disabled={isSaving || !form.name.trim()}
-          label={isSaving ? "Saving..." : isEditing ? "Update project" : "Create project"}
+          label={isSaving ? "Saving..." : isEditing ? "Update" : "Create"}
           onPress={onSubmit}
         />
         {isEditing ? <ActionButton label="Cancel" onPress={onCancel} secondary /> : null}
@@ -414,10 +627,11 @@ function TaskFormView({
       />
       <TextInput
         editable={!disabled}
+        multiline
         onChangeText={(description) => onChange({ ...form, description })}
         placeholder="Description"
         placeholderTextColor="#8A94B2"
-        style={styles.input}
+        style={[styles.input, styles.textArea]}
         value={form.description}
       />
       <Segment
@@ -441,7 +655,7 @@ function TaskFormView({
       <View style={styles.row}>
         <ActionButton
           disabled={disabled || isSaving || !form.name.trim()}
-          label={isSaving ? "Saving..." : isEditing ? "Update task" : "Create task"}
+          label={isSaving ? "Saving..." : isEditing ? "Update" : "Create"}
           onPress={onSubmit}
         />
         {isEditing ? <ActionButton label="Cancel" onPress={onCancel} secondary /> : null}
@@ -450,91 +664,80 @@ function TaskFormView({
   );
 }
 
-function ProjectList({
-  activeId,
-  isLoading,
+function ProjectCard({
+  active,
   onDelete,
   onEdit,
   onSelect,
-  projects,
+  project,
 }: {
-  activeId: string | undefined;
-  isLoading: boolean;
-  onDelete: (id: string) => void;
-  onEdit: (project: ProjectDto) => void;
-  onSelect: (id: string) => void;
-  projects: ProjectDto[];
+  active?: boolean;
+  onDelete?: () => void;
+  onEdit?: () => void;
+  onSelect: () => void;
+  project: ProjectDto;
 }) {
-  if (isLoading) {
-    return <Text style={styles.empty}>Loading projects...</Text>;
-  }
-  if (projects.length === 0) {
-    return <Text style={styles.empty}>No projects yet.</Text>;
-  }
-
   return (
-    <View style={styles.list}>
-      {projects.map((project) => (
-        <View
-          style={[styles.item, activeId === project.id ? styles.activeItem : null]}
-          key={project.id}
-        >
-          <TouchableOpacity onPress={() => onSelect(project.id)} style={styles.itemMain}>
-            <Text style={styles.itemTitle}>{project.name}</Text>
-            <Text style={styles.itemMeta}>
-              {label(project.status)} / {project.progressPercent ?? 0}% complete
-            </Text>
-          </TouchableOpacity>
-          <View style={styles.row}>
-            <InlineButton label="Edit" onPress={() => onEdit(project)} />
-            <InlineButton danger label="Delete" onPress={() => onDelete(project.id)} />
-          </View>
+    <TouchableOpacity onPress={onSelect} style={[styles.item, active ? styles.activeItem : null]}>
+      <View style={styles.itemTop}>
+        <View style={styles.flex}>
+          <Text style={styles.itemTitle}>{project.name}</Text>
+          <Text style={styles.itemMeta}>{label(project.status)}</Text>
         </View>
-      ))}
-    </View>
+        <Text style={styles.progressText}>{percent(project.progressPercent)}</Text>
+      </View>
+      {project.description ? <Text style={styles.itemBody}>{project.description}</Text> : null}
+      <View style={styles.progressTrack}>
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${Math.min(project.progressPercent ?? 0, 100)}%` },
+          ]}
+        />
+      </View>
+      {onEdit && onDelete ? (
+        <View style={styles.inlineActions}>
+          <InlineButton label="Edit" onPress={onEdit} />
+          <InlineButton danger label="Delete" onPress={onDelete} />
+        </View>
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
-function TaskList({
-  isLoading,
+function TaskCard({
   onComplete,
   onDelete,
   onEdit,
-  tasks,
+  task,
 }: {
-  isLoading: boolean;
-  onComplete: (id: string) => void;
-  onDelete: (id: string) => void;
-  onEdit: (task: TaskDto) => void;
-  tasks: TaskDto[];
+  onComplete: () => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  task: TaskDto;
 }) {
-  if (isLoading) {
-    return <Text style={styles.empty}>Loading tasks...</Text>;
-  }
-  if (tasks.length === 0) {
-    return <Text style={styles.empty}>No tasks match this view.</Text>;
-  }
+  const complete = task.status === "COMPLETED";
 
   return (
-    <View style={styles.list}>
-      {tasks.map((task) => (
-        <View style={styles.item} key={task.id}>
-          <View style={styles.itemMain}>
-            <Text style={styles.itemTitle}>{task.name}</Text>
-            <Text style={styles.itemMeta}>
-              {label(task.status)} / {label(task.priority)}{" "}
-              {task.dueDate ? `/ due ${task.dueDate}` : ""}
-            </Text>
-          </View>
-          <View style={styles.row}>
-            {task.status !== "COMPLETED" ? (
-              <InlineButton label="Complete" onPress={() => onComplete(task.id)} />
-            ) : null}
-            <InlineButton label="Edit" onPress={() => onEdit(task)} />
-            <InlineButton danger label="Delete" onPress={() => onDelete(task.id)} />
-          </View>
+    <View style={[styles.item, complete ? styles.completeItem : null]}>
+      <View style={styles.itemTop}>
+        <View style={styles.flex}>
+          <Text style={styles.itemTitle}>{task.name}</Text>
+          <Text style={styles.itemMeta}>
+            {label(task.status)} / {label(task.priority)}
+          </Text>
         </View>
-      ))}
+        <Text style={[styles.badge, task.priority === "HIGH" ? styles.hotBadge : null]}>
+          {label(task.priority)}
+        </Text>
+      </View>
+      {task.description ? <Text style={styles.itemBody}>{task.description}</Text> : null}
+      {task.dueDate ? <Text style={styles.itemMeta}>Due {task.dueDate}</Text> : null}
+      <View style={styles.inlineActions}>
+        {!complete ? <InlineButton label="Complete" onPress={onComplete} /> : null}
+        <InlineButton label="Edit" onPress={onEdit} />
+        <InlineButton danger label="Delete" onPress={onDelete} />
+      </View>
     </View>
   );
 }
@@ -554,7 +757,11 @@ function ActionButton({
     <TouchableOpacity
       disabled={disabled}
       onPress={onPress}
-      style={[styles.actionButton, secondary ? styles.secondaryAction : styles.primaryAction]}
+      style={[
+        styles.actionButton,
+        secondary ? styles.secondaryAction : styles.primaryAction,
+        disabled ? styles.disabledAction : null,
+      ]}
     >
       <Text style={styles.actionText}>{buttonLabel}</Text>
     </TouchableOpacity>
@@ -574,5 +781,42 @@ function InlineButton({
     <TouchableOpacity onPress={onPress} style={styles.inlineButton}>
       <Text style={[styles.inlineText, danger ? styles.inlineDanger : null]}>{buttonLabel}</Text>
     </TouchableOpacity>
+  );
+}
+
+function Notice({ text, tone }: { text: string; tone: "danger" | "warning" }) {
+  return <Text style={[styles.notice, styles[tone]]}>{text}</Text>;
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyTitle}>{text}</Text>
+      <Text style={styles.emptyText}>Pull to refresh or create something new.</Text>
+    </View>
+  );
+}
+
+function BottomNav({ active, onChange }: { active: Tab; onChange: (tab: Tab) => void }) {
+  const tabs: { label: string; value: Tab }[] = [
+    { label: "Dashboard", value: "dashboard" },
+    { label: "Projects", value: "projects" },
+    { label: "Tasks", value: "tasks" },
+  ];
+
+  return (
+    <View style={styles.bottomNav}>
+      {tabs.map((item) => (
+        <TouchableOpacity
+          key={item.value}
+          onPress={() => onChange(item.value)}
+          style={[styles.navItem, active === item.value ? styles.navItemActive : null]}
+        >
+          <Text style={[styles.navText, active === item.value ? styles.navTextActive : null]}>
+            {item.label}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
   );
 }

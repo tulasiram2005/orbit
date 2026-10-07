@@ -29,6 +29,17 @@ type AuthForm = {
   password: string;
 };
 
+type FieldProps = {
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  inputMode?: "email" | "none" | "search" | "tel" | "text" | "url" | "numeric" | "decimal";
+  keyboardType?: "default" | "email-address";
+  label: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  secureTextEntry?: boolean;
+  value: string;
+};
+
 const emptyForm: AuthForm = {
   email: "",
   name: "",
@@ -41,6 +52,34 @@ function messageFor(error: unknown): string {
   }
 
   return "Something went wrong. Please try again.";
+}
+
+function Field({
+  autoCapitalize,
+  inputMode,
+  keyboardType,
+  label,
+  onChangeText,
+  placeholder,
+  secureTextEntry,
+  value,
+}: FieldProps) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        autoCapitalize={autoCapitalize}
+        inputMode={inputMode}
+        keyboardType={keyboardType}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6F7894"
+        secureTextEntry={secureTextEntry}
+        style={styles.input}
+        value={value}
+      />
+    </View>
+  );
 }
 
 export function AuthScreen() {
@@ -154,75 +193,82 @@ export function AuthScreen() {
           />
         }
       >
+        <View style={styles.brandRow}>
+          <View style={styles.brandMark}>
+            <Text style={styles.brandMarkText}>O</Text>
+          </View>
+          <View>
+            <Text style={styles.eyebrow}>Orbit</Text>
+            <Text style={styles.brandSubtle}>Project control</Text>
+          </View>
+        </View>
         <View style={styles.card}>
-          <Text style={styles.eyebrow}>Orbit</Text>
+          <View style={styles.cardGlow} />
+          <Text style={styles.kicker}>{mode === "login" ? "Welcome back" : "New workspace"}</Text>
           <Text style={styles.title}>{mode === "login" ? "Sign in" : "Create account"}</Text>
-          <>
-            <View style={styles.tabs}>
-              <TouchableOpacity
-                onPress={() => setMode("login")}
-                style={[styles.tab, mode === "login" ? styles.activeTab : null]}
-              >
-                <Text style={[styles.tabText, mode === "login" ? styles.activeTabText : null]}>
-                  Login
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setMode("register")}
-                style={[styles.tab, mode === "register" ? styles.activeTab : null]}
-              >
-                <Text style={[styles.tabText, mode === "register" ? styles.activeTabText : null]}>
-                  Register
-                </Text>
-              </TouchableOpacity>
-            </View>
-            {status ? <Text style={[styles.status, styles.neutral]}>{status}</Text> : null}
-            {isOffline ? (
-              <Text style={[styles.status, styles.warning]}>You are offline.</Text>
-            ) : null}
-            {authError ? <Text style={[styles.status, styles.danger]}>{authError}</Text> : null}
-            {mode === "register" ? (
-              <TextInput
-                autoCapitalize="words"
-                onChangeText={(name) => setForm({ ...form, name })}
-                placeholder="Name"
-                placeholderTextColor="#8A94B2"
-                style={styles.input}
-                value={form.name}
-              />
-            ) : null}
-            <TextInput
-              autoCapitalize="none"
-              inputMode="email"
-              keyboardType="email-address"
-              onChangeText={(email) => setForm({ ...form, email })}
-              placeholder="Email"
-              placeholderTextColor="#8A94B2"
-              style={styles.input}
-              value={form.email}
-            />
-            <TextInput
-              onChangeText={(password) => setForm({ ...form, password })}
-              placeholder="Password"
-              placeholderTextColor="#8A94B2"
-              secureTextEntry
-              style={styles.input}
-              value={form.password}
-            />
+          <View style={styles.tabs}>
             <TouchableOpacity
-              disabled={authMutation.isPending || isOffline}
-              onPress={() => authMutation.mutate()}
-              style={[styles.button, styles.primaryButton]}
+              onPress={() => setMode("login")}
+              style={[styles.tab, mode === "login" ? styles.activeTab : null]}
             >
-              <Text style={styles.buttonText}>
-                {authMutation.isPending
-                  ? "Working..."
-                  : mode === "login"
-                    ? "Sign in"
-                    : "Create account"}
+              <Text style={[styles.tabText, mode === "login" ? styles.activeTabText : null]}>
+                Login
               </Text>
             </TouchableOpacity>
-          </>
+            <TouchableOpacity
+              onPress={() => setMode("register")}
+              style={[styles.tab, mode === "register" ? styles.activeTab : null]}
+            >
+              <Text style={[styles.tabText, mode === "register" ? styles.activeTabText : null]}>
+                Register
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {status ? <Text style={[styles.status, styles.neutral]}>{status}</Text> : null}
+          {isOffline ? <Text style={[styles.status, styles.warning]}>You are offline.</Text> : null}
+          {authError ? <Text style={[styles.status, styles.danger]}>{authError}</Text> : null}
+          {mode === "register" ? (
+            <Field
+              autoCapitalize="words"
+              label="Name"
+              onChangeText={(name) => setForm({ ...form, name })}
+              placeholder="Your name"
+              value={form.name}
+            />
+          ) : null}
+          <Field
+            autoCapitalize="none"
+            inputMode="email"
+            keyboardType="email-address"
+            label="Email"
+            onChangeText={(email) => setForm({ ...form, email })}
+            placeholder="you@example.com"
+            value={form.email}
+          />
+          <Field
+            label="Password"
+            onChangeText={(password) => setForm({ ...form, password })}
+            placeholder="Enter password"
+            secureTextEntry
+            value={form.password}
+          />
+          <TouchableOpacity
+            disabled={authMutation.isPending || isOffline}
+            onPress={() => authMutation.mutate()}
+            style={[
+              styles.button,
+              styles.primaryButton,
+              authMutation.isPending || isOffline ? styles.disabledButton : null,
+            ]}
+          >
+            <Text style={styles.buttonText}>
+              {authMutation.isPending
+                ? "Working..."
+                : mode === "login"
+                  ? "Sign in"
+                  : "Create account"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
