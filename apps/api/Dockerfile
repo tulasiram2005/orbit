@@ -23,4 +23,4 @@ FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app /app
 EXPOSE 4000
-CMD ["sh", "-c", "pnpm --filter api prisma migrate deploy && pnpm --filter api start"]
+CMD ["sh", "-c", "node apps/api/node_modules/prisma/build/index.js migrate deploy --schema=apps/api/prisma/schema.prisma && exec node apps/api/dist/server.js"]
