@@ -10,6 +10,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/shared/package.json packages/shared/package.json
+COPY apps/api/prisma/schema.prisma apps/api/prisma/schema.prisma
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build

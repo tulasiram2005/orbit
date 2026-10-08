@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+**/dist
+**/.next
+**/.expo
+**/coverage
+.playwright-browsers
+test-results
+**/*.log
+**/*.tsbuildinfo
