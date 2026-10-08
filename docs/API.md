@@ -167,6 +167,12 @@ Auth: bearer token.
 
 Query: `search`, `status`, `sort`, `order`, `page`, `pageSize`.
 
+Response:
+
+```json
+{ "success": true, "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
+```
+
 ### `POST /api/projects`
 
 Auth: bearer token.
@@ -183,11 +189,13 @@ Request:
 }
 ```
 
+Response: a project DTO in the standard success envelope. Invalid input returns `400 VALIDATION_ERROR`.
+
 ### `GET /api/projects/:id`
 
 Auth: bearer token. Returns 404 for projects owned by another user.
 
-### `PATCH /api/projects/:id`
+### `PUT /api/projects/:id`
 
 Auth: bearer token.
 
@@ -196,6 +204,12 @@ Request:
 ```json
 { "name": "Updated name", "status": "COMPLETED" }
 ```
+
+Response: the updated project DTO. A project owned by another user returns `404 NOT_FOUND`.
+
+### `PATCH /api/projects/:id`
+
+Auth: bearer token. Compatibility alias for `PUT`.
 
 ### `DELETE /api/projects/:id`
 
@@ -219,6 +233,12 @@ Query: `projectId`, `search`, `status`, `priority`, `dueBefore`, `overdue`, `tim
 
 Auth: bearer token. Lists tasks in one project.
 
+Response:
+
+```json
+{ "success": true, "data": [], "meta": { "page": 1, "pageSize": 20, "total": 0 } }
+```
+
 ### `POST /api/tasks`
 
 Auth: bearer token.
@@ -235,6 +255,8 @@ Request:
   "dueDate": "2026-10-07"
 }
 ```
+
+Response: a task DTO in the standard success envelope. Invalid input returns `400 VALIDATION_ERROR`.
 
 ### `GET /api/tasks/:id`
 
@@ -255,6 +277,8 @@ Request:
   "dueDate": "2026-10-07"
 }
 ```
+
+Response: the updated task DTO. A task owned by another user returns `404 NOT_FOUND`.
 
 ### `PATCH /api/tasks/:id`
 

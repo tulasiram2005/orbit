@@ -2,7 +2,7 @@
 
 ## 0:00-0:30 Sign In
 
-Open the web or Android app. Sign in with:
+Open the deployed web URL and the installed Android APK. Sign in with:
 
 - Email: `demo@orbit.test`
 - Password: `StrongTestPassword123!`
@@ -25,13 +25,13 @@ Explain that pending means `status = PENDING`, and overdue means unfinished task
 
 ## 1:15-2:00 Projects
 
-Open Projects. Search for a project. Tap a project card to open the project detail screen and show its tasks.
+On the web, open Projects and search for a project. On mobile, tap the project card to open its detail screen and show its tasks.
 
 Create a new project with a name, description, status, start date and end date. Edit it, then cancel a delete confirmation to show it is safe.
 
 ## 2:00-3:00 Tasks
 
-Open Tasks. Show all tasks by default. Use search, status, priority and project filters.
+Create a task on the web. Open Tasks on mobile, pull to refresh, and show the new task. Use search, status, priority and project filters.
 
 Create a task from the bottom sheet. Pick a project, enter name and description, set status, priority and due date. Save it.
 

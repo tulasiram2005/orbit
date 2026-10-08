@@ -54,6 +54,8 @@ pnpm --filter api prisma migrate deploy
 pnpm --filter api prisma db seed
 ```
 
+Copy each `.env.example` to `.env` for local development when you need values beyond the defaults. Never commit those `.env` files.
+
 Run the API:
 
 ```bash
@@ -124,7 +126,14 @@ The `preview` profile produces an APK. Because this is an EAS preview/release-st
 
 API deployment is prepared with `apps/api/Dockerfile` and `render.yaml`. The Docker command runs `prisma migrate deploy` before `node dist/server.js`.
 
-For Vercel web deployment, set:
+The Render blueprint also defines the Next.js web service `orbit-web`. After syncing the blueprint, set the API service's `API_CORS_ORIGINS` to the exact generated web URL, for example `https://orbit-web.onrender.com`, then redeploy the API. The web service uses:
+
+```text
+API_URL=https://orbit-api-i42f.onrender.com
+NEXT_PUBLIC_API_URL=https://orbit-api-i42f.onrender.com
+```
+
+For Vercel web deployment instead, create a project from this repository with the root directory at the repository root, set the framework to Next.js, and add:
 
 ```text
 API_URL=https://your-api.example.com
@@ -132,6 +141,8 @@ NEXT_PUBLIC_API_URL=https://your-api.example.com
 ```
 
 The Next.js rewrite proxies `/api/*` to `API_URL`.
+
+The web submission URL is the generated Render or Vercel URL; the repository intentionally does not hard-code a provider-generated hostname.
 
 Free-tier hosts may cold start. The first request after inactivity can be slow; `/health` is cheap and `/ready` confirms database connectivity.
 

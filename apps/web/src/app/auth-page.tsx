@@ -37,6 +37,7 @@ export function AuthPage() {
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [user, setUser] = useState<UserDto | undefined>();
   const [bootMessage, setBootMessage] = useState("Checking your session...");
+  const [sessionMessage, setSessionMessage] = useState("");
 
   const client = useMemo(
     () =>
@@ -49,6 +50,12 @@ export function AuthPage() {
             sessionStorage.setItem(accessTokenKey, token);
             return;
           }
+          sessionStorage.removeItem(accessTokenKey);
+        },
+        onSessionExpired: () => {
+          setUser(undefined);
+          setAccessToken(undefined);
+          setSessionMessage("Session expired. Please sign in again.");
           sessionStorage.removeItem(accessTokenKey);
         },
       }),
@@ -78,6 +85,7 @@ export function AuthPage() {
     },
     onSuccess: (session: AuthSessionDto) => {
       setUser(session.user);
+      setSessionMessage("");
       setForm(emptyForm);
     },
   });
@@ -137,6 +145,7 @@ export function AuthPage() {
           </button>
         </div>
         {bootMessage ? <div className="status neutral">{bootMessage}</div> : null}
+        {sessionMessage ? <div className="status neutral">{sessionMessage}</div> : null}
         {authMutation.error ? (
           <div className="status danger">{errorMessage(authMutation.error)}</div>
         ) : null}

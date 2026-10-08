@@ -111,6 +111,13 @@ export function AuthScreen() {
           }
           await SecureStore.deleteItemAsync(accessTokenKey);
         },
+        onSessionExpired: async () => {
+          setUser(undefined);
+          setAccessToken(undefined);
+          setStatus("Session expired. Please sign in again.");
+          await SecureStore.deleteItemAsync(accessTokenKey);
+          await SecureStore.deleteItemAsync(refreshTokenKey);
+        },
       }),
     [accessToken]
   );
@@ -132,6 +139,10 @@ export function AuthScreen() {
     },
     onSuccess: saveSession,
     onError: async (error) => {
+      if (isOffline || error instanceof TypeError) {
+        setStatus("You are offline. Check your connection and try again.");
+        return;
+      }
       setStatus(
         error instanceof Error && error.message === noStoredSessionMessage
           ? ""

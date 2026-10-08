@@ -34,6 +34,7 @@ export type OrbitClientOptions = {
   baseUrl: string;
   getAccessToken?: () => string | undefined | Promise<string | undefined>;
   onAccessToken?: (token: string | undefined) => void | Promise<void>;
+  onSessionExpired?: () => void | Promise<void>;
 };
 
 export type OrbitClient = ReturnType<typeof createOrbitClient>;
@@ -99,6 +100,22 @@ function queryString(query: Record<string, string | number | boolean | undefined
   return value ? `?${value}` : "";
 }
 
+async function notifyExpiredSession(
+  path: string,
+  error: unknown,
+  callback: OrbitClientOptions["onSessionExpired"]
+) {
+  if (
+    callback &&
+    !path.startsWith("/api/auth/") &&
+    error instanceof OrbitApiError &&
+    error.status === 401 &&
+    (error.code === "TOKEN_EXPIRED" || error.code === "UNAUTHENTICATED")
+  ) {
+    await callback();
+  }
+}
+
 export function createOrbitClient(options: OrbitClientOptions) {
   async function request<TData>(path: string, init: RequestInit = {}): Promise<TData> {
     const token = await options.getAccessToken?.();
@@ -118,7 +135,12 @@ export function createOrbitClient(options: OrbitClientOptions) {
       headers,
     });
 
-    return parseResponse<TData>(response);
+    try {
+      return await parseResponse<TData>(response);
+    } catch (error) {
+      await notifyExpiredSession(path, error, options.onSessionExpired);
+      throw error;
+    }
   }
 
   async function requestEnvelope<TData, TMeta>(
@@ -142,7 +164,12 @@ export function createOrbitClient(options: OrbitClientOptions) {
       headers,
     });
 
-    return parseEnvelope<TData, TMeta>(response);
+    try {
+      return await parseEnvelope<TData, TMeta>(response);
+    } catch (error) {
+      await notifyExpiredSession(path, error, options.onSessionExpired);
+      throw error;
+    }
   }
 
   async function authRequest(path: string, body: unknown): Promise<AuthSessionDto> {
@@ -177,7 +204,7 @@ export function createOrbitClient(options: OrbitClientOptions) {
     createProject: (input: ProjectCreateInput) =>
       request<ProjectDto>("/api/projects", { method: "POST", body: JSON.stringify(input) }),
     updateProject: (id: string, input: ProjectUpdateInput) =>
-      request<ProjectDto>(`/api/projects/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+      request<ProjectDto>(`/api/projects/${id}`, { method: "PUT", body: JSON.stringify(input) }),
     deleteProject: (id: string) =>
       request<{ deleted: true }>(`/api/projects/${id}`, { method: "DELETE" }),
     listTasks: async (query: Partial<TaskQuery> = {}) => {

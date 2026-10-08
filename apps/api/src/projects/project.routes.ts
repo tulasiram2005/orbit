@@ -23,6 +23,12 @@ export function createProjectRouter(env: ApiEnv) {
   router.get("/", validateQuery(projectQuerySchema), asyncHandler(controller.list));
   router.post("/", validateBody(projectCreateSchema), asyncHandler(controller.create));
   router.get("/:id", validateParams(idParamSchema), asyncHandler(controller.get));
+  router.put(
+    "/:id",
+    validateParams(idParamSchema),
+    validateBody(projectUpdateSchema),
+    asyncHandler(controller.update)
+  );
   router.patch(
     "/:id",
     validateParams(idParamSchema),

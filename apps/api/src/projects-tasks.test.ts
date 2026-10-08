@@ -111,7 +111,7 @@ describe("project and task routes", () => {
 
     const updated = body<ProjectDto>(
       await request(app)
-        .patch(`/api/projects/${created.id}`)
+        .put(`/api/projects/${created.id}`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ status: "COMPLETED" })
         .expect(200)
@@ -235,6 +235,11 @@ describe("project and task routes", () => {
       .expect(404);
     await request(app)
       .patch(`/api/projects/${project.id}`)
+      .set("Authorization", `Bearer ${otherToken}`)
+      .send({ name: "Stolen" })
+      .expect(404);
+    await request(app)
+      .put(`/api/projects/${project.id}`)
       .set("Authorization", `Bearer ${otherToken}`)
       .send({ name: "Stolen" })
       .expect(404);
