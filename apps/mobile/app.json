@@ -6,6 +6,15 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "plugins": ["expo-router"]
+    "plugins": ["expo-router", "@react-native-community/datetimepicker"],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "09ab38bb-f319-49ac-bda4-101e9a3d8eb5"
+      }
+    },
+    "android": {
+      "package": "com.tulasiram_06.orbit"
+    }
   }
 }

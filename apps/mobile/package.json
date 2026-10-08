@@ -7,20 +7,24 @@
   "scripts": {
     "build": "pnpm typecheck",
     "dev": "expo start",
+    "eas-build-post-install": "pnpm --filter @orbit/api-client... build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
     "@orbit/api-client": "workspace:*",
     "@orbit/shared": "workspace:*",
-    "@react-native-community/datetimepicker": "^9.2.1",
+    "@react-native-community/datetimepicker": "^9.1.0",
     "@react-native-community/netinfo": "12.0.1",
     "@tanstack/react-query": "^5.90.3",
     "expo": "^57.0.27",
+    "expo-constants": "~57.0.21",
+    "expo-linking": "~57.0.12",
     "expo-router": "^57.0.25",
     "expo-secure-store": "^57.0.4",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@expo/ngrok": "^4.1.3",
