@@ -2,10 +2,12 @@
 
 ## 0:00-0:30 Sign In
 
-Open the deployed web URL and the installed Android APK. Sign in with:
+Open the deployed web URL and the installed Android APK. Sign in with the guarded production demo account created from Render's environment settings:
 
-- Email: `demo@orbit.test`
-- Password: `StrongTestPassword123!`
+- Email: `demo.production@orbit.test`
+- Password: the value configured in `ORBIT_PRODUCTION_SEED_PASSWORD`
+
+For local seeded data, use `demo@orbit.test` and `StrongTestPassword123!` instead.
 
 Point out that the same account works on web and mobile because both use the same API and PostgreSQL database.
 
