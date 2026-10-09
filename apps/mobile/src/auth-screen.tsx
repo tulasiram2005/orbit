@@ -143,6 +143,13 @@ export function AuthScreen() {
         setStatus("You are offline. Check your connection and try again.");
         return;
       }
+      if (
+        !(error instanceof OrbitApiError && error.status === 401) &&
+        !(error instanceof Error && error.message === noStoredSessionMessage)
+      ) {
+        setStatus("Unable to restore your session. Please retry.");
+        return;
+      }
       setStatus(
         error instanceof Error && error.message === noStoredSessionMessage
           ? ""

@@ -3,15 +3,13 @@ services:
     name: orbit-web
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter web build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter web... build
     startCommand: pnpm --filter web start
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
         value: "22"
       - key: API_URL
-        value: https://orbit-api-i42f.onrender.com
-      - key: NEXT_PUBLIC_API_URL
         value: https://orbit-api-i42f.onrender.com
   - type: web
     name: orbit-api

@@ -7,7 +7,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { DashboardPage } from "./dashboard-page";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const apiUrl = "";
 const accessTokenKey = "orbit_access_token";
 
 type Mode = "login" | "register";

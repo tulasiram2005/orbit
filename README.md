@@ -29,20 +29,19 @@ flowchart LR
 
 ## Environment Variables
 
-| Variable                         | App        | Required          | Notes                                        |
-| -------------------------------- | ---------- | ----------------- | -------------------------------------------- |
-| `DATABASE_URL`                   | API        | yes               | PostgreSQL connection string                 |
-| `API_PORT`                       | API        | no                | Defaults to `4000`                           |
-| `API_CORS_ORIGINS`               | API        | yes               | Comma-separated allow-list, never `*`        |
-| `JWT_ACCESS_SECRET`              | API        | yes               | At least 32 characters                       |
-| `JWT_REFRESH_SECRET`             | API        | yes               | At least 32 characters                       |
-| `NODE_ENV`                       | API        | no                | `development`, `test`, or `production`       |
-| `ORBIT_ALLOW_PRODUCTION_SEED`    | API        | seed only         | Must be `true` for production demo seed      |
-| `ORBIT_PRODUCTION_SEED_PASSWORD` | API        | seed only         | Password for fake production demo account    |
-| `NEXT_PUBLIC_API_URL`            | Web        | local auth client | Browser-visible API base URL                 |
-| `API_URL`                        | Web deploy | yes               | Server rewrite target for `/api/*` on Vercel |
-| `WEB_API_URL`                    | Web deploy | no                | Backward-compatible alias for `API_URL`      |
-| `EXPO_PUBLIC_API_URL`            | Mobile     | yes               | API base URL baked into Expo builds          |
+| Variable                         | App        | Required      | Notes                                                                |
+| -------------------------------- | ---------- | ------------- | -------------------------------------------------------------------- |
+| `DATABASE_URL`                   | API        | yes           | PostgreSQL connection string                                         |
+| `API_PORT`                       | API        | no            | Defaults to `4000`                                                   |
+| `API_CORS_ORIGINS`               | API        | yes           | Comma-separated allow-list, never `*`                                |
+| `JWT_ACCESS_SECRET`              | API        | yes           | At least 32 characters                                               |
+| `JWT_REFRESH_SECRET`             | API        | yes           | At least 32 characters                                               |
+| `NODE_ENV`                       | API        | no            | `development`, `test`, or `production`                               |
+| `ORBIT_ALLOW_PRODUCTION_SEED`    | API        | seed only     | Must be `true` for production demo seed                              |
+| `ORBIT_PRODUCTION_SEED_PASSWORD` | API        | seed only     | Password for fake production demo account                            |
+| `API_URL`                        | Web        | yes in deploy | Server rewrite target for `/api/*`; browser calls same-origin `/api` |
+| `WEB_API_URL`                    | Web deploy | no            | Backward-compatible alias for `API_URL`                              |
+| `EXPO_PUBLIC_API_URL`            | Mobile     | yes           | API base URL baked into Expo builds                                  |
 
 ## Local Setup
 
@@ -54,7 +53,7 @@ pnpm --filter api prisma migrate deploy
 pnpm --filter api prisma db seed
 ```
 
-Copy each `.env.example` to `.env` for local development when you need values beyond the defaults. Never commit those `.env` files.
+Before starting locally, copy `.env.example` to `.env` at the repository root and `apps/api/.env.example` to `apps/api/.env` if you run the API from that directory. Set strong local JWT secrets and keep these files untracked.
 
 Run the API:
 
@@ -113,11 +112,11 @@ Web and mobile send `Intl.DateTimeFormat().resolvedOptions().timeZone` to dashbo
 
 ## Mobile APK
 
-Set the deployed API URL in `apps/mobile/eas.json`, then build:
+The committed `apps/mobile/eas.json` already points at the deployed API URL. Build the preview APK with:
 
 ```bash
 cd apps/mobile
-pnpm exec eas build --profile preview --platform android
+npx --yes eas-cli build --profile preview --platform android
 ```
 
 The `preview` profile produces an APK. Because this is an EAS preview/release-style build, the Expo Go developer overlay button is not part of the app.
@@ -137,7 +136,6 @@ For Vercel web deployment instead, create a project from this repository with th
 
 ```text
 API_URL=https://your-api.example.com
-NEXT_PUBLIC_API_URL=https://your-api.example.com
 ```
 
 The Next.js rewrite proxies `/api/*` to `API_URL`.

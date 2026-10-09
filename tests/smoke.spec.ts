@@ -6,7 +6,7 @@ test("register, create, filter, complete and delete", async ({ page }) => {
   const password = "StrongTestPassword123!";
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Register" }).click();
+  await page.getByRole("tab", { name: "Register" }).click();
   await page.getByLabel("Name").fill("Smoke User");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
