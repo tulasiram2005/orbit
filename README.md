@@ -123,14 +123,15 @@ The `preview` profile produces an APK. Because this is an EAS preview/release-st
 
 ## Deployment Notes
 
-API deployment is prepared with `apps/api/Dockerfile` and `render.yaml`. The Docker command runs `prisma migrate deploy` before `node dist/server.js`.
+API deployment is prepared with `apps/api/Dockerfile` and `render.yaml`. The Docker command runs `prisma migrate deploy` before `node dist/server.js`. When `ORBIT_ALLOW_PRODUCTION_SEED=true`, it also runs the guarded, idempotent fake production seed once before starting the API.
 
 The Render blueprint also defines the Next.js web service `orbit-web`. After syncing the blueprint, set the API service's `API_CORS_ORIGINS` to the exact generated web URL, for example `https://orbit-web.onrender.com`, then redeploy the API. The web service uses:
 
 ```text
 API_URL=https://orbit-api-i42f.onrender.com
-NEXT_PUBLIC_API_URL=https://orbit-api-i42f.onrender.com
 ```
+
+To create the disposable production demo account on Render's free plan, set `ORBIT_ALLOW_PRODUCTION_SEED=true` and `ORBIT_PRODUCTION_SEED_PASSWORD` to a new fake password of at least 12 characters in the API service environment, then deploy once. The seed creates `demo.production@orbit.test` and does nothing on later restarts. Set the flag back to `false` after that deployment.
 
 For Vercel web deployment instead, create a project from this repository with the root directory at the repository root, set the framework to Next.js, and add:
 

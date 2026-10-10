@@ -23,4 +23,4 @@ FROM base AS runner
 ENV NODE_ENV=production
 COPY --from=build /app /app
 EXPOSE 4000
-CMD ["sh", "-c", "node apps/api/node_modules/prisma/build/index.js migrate deploy --schema=apps/api/prisma/schema.prisma && exec node apps/api/dist/server.js"]
+CMD ["sh", "-c", "node apps/api/node_modules/prisma/build/index.js migrate deploy --schema=apps/api/prisma/schema.prisma && if [ \"$ORBIT_ALLOW_PRODUCTION_SEED\" = \"true\" ]; then node apps/api/node_modules/tsx/dist/cli.mjs apps/api/prisma/seed-production.ts; fi && exec node apps/api/dist/server.js"]
