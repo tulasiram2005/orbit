@@ -14,7 +14,8 @@
       }
     },
     "android": {
-      "package": "com.tulasiram_06.orbit"
+      "package": "com.tulasiram_06.orbit",
+      "versionCode": 2
     }
   }
 }
