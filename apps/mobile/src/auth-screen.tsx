@@ -1,4 +1,4 @@
-import { createOrbitClient, OrbitApiError } from "@orbit/api-client";
+import { createOrbitClient, OrbitApiError, OrbitNetworkError } from "@orbit/api-client";
 import type { AuthSessionDto, UserDto } from "@orbit/shared";
 import NetInfo, { useNetInfo } from "@react-native-community/netinfo";
 import { useMutation } from "@tanstack/react-query";
@@ -53,6 +53,10 @@ function messageFor(error: unknown): string {
     return error.message;
   }
 
+  if (error instanceof OrbitNetworkError) {
+    return error.message;
+  }
+
   return "Something went wrong. Please try again.";
 }
 
@@ -73,7 +77,7 @@ function Field({
       <TextInput
         autoCapitalize={autoCapitalize}
         autoComplete={autoComplete}
-        importantForAutofill="no"
+        importantForAutofill="noExcludeDescendants"
         inputMode={inputMode}
         keyboardType={keyboardType}
         onChangeText={onChangeText}
@@ -191,6 +195,10 @@ export function AuthScreen() {
 
   useEffect(() => {
     refreshMutation.mutate();
+  }, []);
+
+  useEffect(() => {
+    void client.health().catch(() => undefined);
   }, []);
 
   const isOffline = netInfo.isConnected === false;

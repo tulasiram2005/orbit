@@ -1,6 +1,6 @@
 "use client";
 
-import { createOrbitClient, OrbitApiError } from "@orbit/api-client";
+import { createOrbitClient, OrbitApiError, OrbitNetworkError } from "@orbit/api-client";
 import type { AuthSessionDto, UserDto } from "@orbit/shared";
 import { useMutation } from "@tanstack/react-query";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -25,6 +25,10 @@ const emptyForm: AuthForm = {
 
 function errorMessage(error: unknown): string {
   if (error instanceof OrbitApiError) {
+    return error.message;
+  }
+
+  if (error instanceof OrbitNetworkError) {
     return error.message;
   }
 
@@ -103,6 +107,10 @@ export function AuthPage() {
     refreshMutation.mutate();
   }, []);
 
+  useEffect(() => {
+    void client.health().catch(() => undefined);
+  }, []);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     authMutation.mutate();
@@ -170,6 +178,7 @@ export function AuthPage() {
               inputMode="email"
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               required
+              spellCheck={false}
               type="email"
               value={form.email}
             />
@@ -182,6 +191,7 @@ export function AuthPage() {
               maxLength={72}
               onChange={(event) => setForm({ ...form, password: event.target.value })}
               required
+              spellCheck={false}
               type="password"
               value={form.password}
             />

@@ -124,6 +124,17 @@ h1 {
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
 }
 
+/* Keep Chromium's saved-credential paint aligned with Orbit's dark input theme. */
+.field input:-webkit-autofill,
+.field input:-webkit-autofill:hover,
+.field input:-webkit-autofill:focus,
+.field input:-webkit-autofill:active {
+  -webkit-text-fill-color: #e8ecf8;
+  box-shadow: 0 0 0 1000px #0b0f1a inset;
+  caret-color: #e8ecf8;
+  transition: background-color 9999s ease-out 0s;
+}
+
 .button {
   border: 0;
   border-radius: 12px;

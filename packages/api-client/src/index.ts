@@ -49,7 +49,20 @@ export type ListResponse<TData> = {
   meta: PageMeta;
 };
 
+const requestTimeoutMs = 15_000;
+
+export class OrbitNetworkError extends Error {
+  constructor(message = "The server is taking too long to respond. Please try again.") {
+    super(message);
+    this.name = "OrbitNetworkError";
+  }
+}
+
 async function parseResponse<TData>(response: Response): Promise<TData> {
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new OrbitNetworkError("The service is temporarily unavailable. Please try again.");
+  }
+
   const body = (await response.json()) as SuccessEnvelope<TData> | ErrorEnvelope;
 
   if (!response.ok || !body.success) {
@@ -68,6 +81,10 @@ async function parseResponse<TData>(response: Response): Promise<TData> {
 async function parseEnvelope<TData, TMeta>(
   response: Response
 ): Promise<SuccessEnvelope<TData, TMeta>> {
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new OrbitNetworkError("The service is temporarily unavailable. Please try again.");
+  }
+
   const body = (await response.json()) as SuccessEnvelope<TData, TMeta> | ErrorEnvelope;
 
   if (!response.ok || !body.success) {
@@ -100,6 +117,23 @@ function queryString(query: Record<string, string | number | boolean | undefined
   return value ? `?${value}` : "";
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), requestTimeoutMs);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new OrbitNetworkError();
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function notifyExpiredSession(
   path: string,
   error: unknown,
@@ -129,7 +163,7 @@ export function createOrbitClient(options: OrbitClientOptions) {
       headers.set("authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(joinUrl(options.baseUrl, path), {
+    const response = await fetchWithTimeout(joinUrl(options.baseUrl, path), {
       ...init,
       credentials: "include",
       headers,
@@ -158,7 +192,7 @@ export function createOrbitClient(options: OrbitClientOptions) {
       headers.set("authorization", `Bearer ${token}`);
     }
 
-    const response = await fetch(joinUrl(options.baseUrl, path), {
+    const response = await fetchWithTimeout(joinUrl(options.baseUrl, path), {
       ...init,
       credentials: "include",
       headers,
